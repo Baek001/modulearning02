@@ -29,6 +29,8 @@ function backendEnvVars(env) {
     DB_USERNAME: env.DB_USERNAME,
     DB_PASSWORD: env.DB_PASSWORD,
     DB_DRIVER: env.DB_DRIVER || "org.postgresql.Driver",
+    SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: env.SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE,
+    SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: env.SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE,
     JWT_SECRET_KEY: env.JWT_SECRET_KEY,
     APP_FRONTEND_BASE_URL: env.APP_FRONTEND_BASE_URL,
     CORS_ALLOW_ORIGINS: env.CORS_ALLOW_ORIGINS,
@@ -64,6 +66,15 @@ export class BackendContainer extends Container {
   defaultPort = 18080;
   sleepAfter = "20m";
   envVars = backendEnvVars(this.env);
+
+  onStart() {
+    console.log("Backend container started");
+  }
+
+  onError(error) {
+    console.error("Backend container error", error);
+    throw error;
+  }
 }
 
 async function forwardToBackend(request, env) {
@@ -74,7 +85,36 @@ async function forwardToBackend(request, env) {
 
   const backendRequest = new Request(request, { headers });
   const containerName = env.BACKEND_CONTAINER_NAME || "primary";
-  return env.BACKEND.getByName(containerName).fetch(backendRequest);
+  const backend = env.BACKEND.getByName(containerName);
+  const backendPort = Number(env.BACKEND_INTERNAL_PORT || "18080");
+
+  try {
+    await backend.startAndWaitForPorts({
+      ports: backendPort,
+      cancellationOptions: {
+        instanceGetTimeoutMS: 120000,
+        portReadyTimeoutMS: 120000,
+        waitInterval: 1000,
+      },
+    });
+
+    return await backend.fetch(backendRequest);
+  } catch (error) {
+    console.error("Backend request failed", error);
+    const message = error instanceof Error ? error.message : String(error);
+    return new Response(
+      JSON.stringify({
+        error: "BACKEND_CONTAINER_FAILURE",
+        message,
+      }),
+      {
+        status: 500,
+        headers: {
+          "content-type": "application/json; charset=utf-8",
+        },
+      },
+    );
+  }
 }
 
 export default {
