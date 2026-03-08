@@ -7,6 +7,7 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "secrets:sync": "powershell -ExecutionPolicy Bypass -File scripts/sync-secrets.ps1",
+    "seed:demo": "node scripts/seed-demo-data.mjs",
     "smoke:auth": "node scripts/smoke-auth.mjs",
     "smoke:all": "node scripts/smoke-suite.mjs"
   },

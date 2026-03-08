@@ -11,10 +11,54 @@ function containsNonAscii(value) {
   return /[^\x00-\x7F]/.test(value);
 }
 
-function availableDriveLetter() {
-  for (const letter of ['Z', 'Y', 'X', 'W', 'V', 'U', 'T']) {
-    if (!existsSync(`${letter}:\\`)) {
-      return letter;
+function normalizeWinPath(value) {
+  return path.win32.resolve(value).replace(/[\\/]+$/, '').toLowerCase();
+}
+
+function listSubstMappings() {
+  const result = spawnSync('subst.exe', [], {
+    encoding: 'utf8',
+    windowsHide: true,
+  });
+
+  if (result.status !== 0 || !result.stdout) {
+    return new Map();
+  }
+
+  const mappings = new Map();
+  const lines = result.stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+
+  for (const line of lines) {
+    const match = line.match(/^([A-Z]):\\:\s*=>\s*(.+)$/i);
+    if (!match) {
+      continue;
+    }
+
+    mappings.set(match[1].toUpperCase(), normalizeWinPath(match[2]));
+  }
+
+  return mappings;
+}
+
+function resolveAsciiAlias(projectRoot) {
+  const normalizedProjectRoot = normalizeWinPath(projectRoot);
+  const mappings = listSubstMappings();
+
+  for (const [letter, target] of mappings) {
+    if (target === normalizedProjectRoot) {
+      return {
+        driveLetter: letter,
+        created: false,
+      };
+    }
+  }
+
+  for (const letter of 'ZYXWVUTSRQPONMLKJIHGFEDCBA') {
+    if (!mappings.has(letter) && !existsSync(`${letter}:\\`)) {
+      return {
+        driveLetter: letter,
+        created: true,
+      };
     }
   }
 
@@ -34,11 +78,13 @@ function runCommand(file, args) {
 
 async function runBuildFromAsciiAlias() {
   const projectRoot = process.cwd();
-  const driveLetter = availableDriveLetter();
+  const { driveLetter, created } = resolveAsciiAlias(projectRoot);
   const aliasRoot = `${driveLetter}:\\`;
   const aliasScript = path.win32.join(aliasRoot, 'scripts', 'build.mjs');
 
-  runCommand('subst.exe', [`${driveLetter}:`, projectRoot]);
+  if (created) {
+    runCommand('subst.exe', [`${driveLetter}:`, projectRoot]);
+  }
 
   try {
     const result = spawnSync(process.execPath, [aliasScript], {
@@ -53,10 +99,12 @@ async function runBuildFromAsciiAlias() {
 
     process.exit(result.status ?? 1);
   } finally {
-    spawnSync('subst.exe', [`${driveLetter}:`, '/d'], {
-      stdio: 'inherit',
-      windowsHide: true,
-    });
+    if (created) {
+      spawnSync('subst.exe', [`${driveLetter}:`, '/d'], {
+        stdio: 'inherit',
+        windowsHide: true,
+      });
+    }
   }
 }
 

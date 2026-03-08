@@ -2298,6 +2298,74 @@ textarea.form-input,
   padding: var(--spacing-lg);
 }
 
+.feed-composer-card {
+  display: grid;
+  gap: var(--spacing-md);
+  background:
+    radial-gradient(circle at top right, rgba(92, 124, 250, 0.12), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.95));
+}
+
+.feed-composer-card.expanded {
+  border-color: rgba(92, 124, 250, 0.16);
+  box-shadow: 0 20px 44px rgba(37, 99, 235, 0.12);
+}
+
+.feed-composer-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+}
+
+.feed-composer-header-copy {
+  display: grid;
+  gap: 6px;
+}
+
+.feed-composer-header-copy h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.feed-composer-header-copy p {
+  margin: 0;
+  color: var(--gray-600);
+  font-size: var(--font-size-sm);
+}
+
+.feed-composer-kicker {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.08);
+  color: var(--gray-700);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.feed-composer-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(92, 124, 250, 0.14);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--gray-800);
+  padding: 10px 14px;
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+}
+
+.feed-composer-toggle:hover {
+  border-color: rgba(92, 124, 250, 0.28);
+  transform: translateY(-1px);
+}
+
 .feed-composer-form,
 .feed-composer-row,
 .feed-search-form,
@@ -2321,12 +2389,41 @@ textarea.form-input,
   gap: var(--spacing-sm);
 }
 
+.feed-composer-row-tight {
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.feed-composer-field {
+  display: grid;
+  gap: 8px;
+}
+
+.feed-composer-field-compact {
+  min-width: 220px;
+}
+
+.feed-composer-label {
+  color: var(--gray-600);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .feed-checkbox {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   color: var(--gray-600);
   font-size: var(--font-size-sm);
+}
+
+.feed-checkbox-card {
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(15, 23, 42, 0.08);
 }
 
 .feed-composer-textarea {
@@ -2336,7 +2433,16 @@ textarea.form-input,
 
 .feed-composer-actions {
   display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
   justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.feed-composer-hint {
+  margin-right: auto;
+  color: var(--gray-500);
+  font-size: var(--font-size-sm);
 }
 
 .feed-toolbar-card {
@@ -2369,6 +2475,22 @@ textarea.form-input,
   color: var(--gray-700);
   font-size: var(--font-size-sm);
   font-weight: 600;
+}
+
+@media (max-width: 900px) {
+  .feed-composer-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .feed-composer-toggle {
+    justify-content: center;
+  }
+
+  .feed-composer-field-compact {
+    min-width: 0;
+    width: 100%;
+  }
 }
 
 .feed-toggle-button.active {

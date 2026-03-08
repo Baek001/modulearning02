@@ -527,23 +527,49 @@ export default function DashboardPage() {
                 </div>
 
                 {/* Quick composer — collapsible */}
-                <section className="feed-composer-card">
-                    <button type="button" className="feed-composer-toggle" onClick={() => setComposerOpen(!composerOpen)}>
-                        <span>✏️ 빠른 글쓰기</span>
-                        <span className={`feed-collapse-arrow ${composerOpen ? 'open' : ''}`}>▸</span>
-                    </button>
+                <section className={`feed-composer-card ${composerOpen ? 'expanded' : ''}`}>
+                    <div className="feed-composer-header">
+                        <div className="feed-composer-header-copy">
+                            <span className="feed-composer-kicker">COMMUNITY DESK</span>
+                            <h3>빠른 글쓰기</h3>
+                            <p>공지와 사내 소식을 대시보드에서 바로 올립니다.</p>
+                        </div>
+                        <button type="button" className="feed-composer-toggle" onClick={() => setComposerOpen(!composerOpen)}>
+                            <span>{composerOpen ? '접기' : '열기'}</span>
+                            <span className={`feed-collapse-arrow ${composerOpen ? 'open' : ''}`}>▸</span>
+                        </button>
+                    </div>
                     {composerOpen && (
                         <form className="feed-composer-form" onSubmit={handleComposeSubmit}>
-                            <div className="feed-composer-row">
-                                <select className="form-input" value={composeForm.bbsCtgrCd} onChange={(event) => setComposeForm((current) => ({ ...current, bbsCtgrCd: event.target.value }))}>
-                                    {composeCategories.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-                                </select>
-                                {isAdmin && composeForm.bbsCtgrCd === 'F101' && <label className="feed-checkbox"><input type="checkbox" checked={composeForm.fixedYn === 'Y'} onChange={(event) => setComposeForm((current) => ({ ...current, fixedYn: event.target.checked ? 'Y' : 'N' }))} /> 상단 고정</label>}
+                            <div className="feed-composer-row feed-composer-row-tight">
+                                <label className="feed-composer-field feed-composer-field-compact">
+                                    <span className="feed-composer-label">분류</span>
+                                    <select className="form-input" value={composeForm.bbsCtgrCd} onChange={(event) => setComposeForm((current) => ({ ...current, bbsCtgrCd: event.target.value }))}>
+                                        {composeCategories.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                                    </select>
+                                </label>
+                                {isAdmin && composeForm.bbsCtgrCd === 'F101' && (
+                                    <label className="feed-checkbox feed-checkbox-card">
+                                        <input type="checkbox" checked={composeForm.fixedYn === 'Y'} onChange={(event) => setComposeForm((current) => ({ ...current, fixedYn: event.target.checked ? 'Y' : 'N' }))} />
+                                        상단 고정
+                                    </label>
+                                )}
                             </div>
-                            <input className="form-input" type="text" placeholder="제목" value={composeForm.pstTtl} onChange={(event) => setComposeForm((current) => ({ ...current, pstTtl: event.target.value }))} />
-                            <textarea className="form-input feed-composer-textarea" rows="3" placeholder="내용을 입력해 주세요." value={composeForm.contents} onChange={(event) => setComposeForm((current) => ({ ...current, contents: event.target.value }))} />
+                            <label className="feed-composer-field">
+                                <span className="feed-composer-label">제목</span>
+                                <input className="form-input" type="text" placeholder="예: 주간 운영 브리핑" value={composeForm.pstTtl} onChange={(event) => setComposeForm((current) => ({ ...current, pstTtl: event.target.value }))} />
+                            </label>
+                            <label className="feed-composer-field">
+                                <span className="feed-composer-label">내용</span>
+                                <textarea className="form-input feed-composer-textarea" rows="4" placeholder="공지나 공유할 내용을 간단히 입력해 주세요." value={composeForm.contents} onChange={(event) => setComposeForm((current) => ({ ...current, contents: event.target.value }))} />
+                            </label>
                             {composeError && <div className="form-error">{composeError}</div>}
-                            <div className="feed-composer-actions"><button type="submit" className="btn btn-primary btn-sm" disabled={composing}>{composing ? '등록 중...' : '게시하기'}</button></div>
+                            <div className="feed-composer-actions">
+                                <div className="feed-composer-hint">
+                                    {composeForm.bbsCtgrCd === 'F101' ? '공지사항 위젯과 피드에 함께 반영됩니다.' : '피드와 게시판에서 바로 확인할 수 있습니다.'}
+                                </div>
+                                <button type="submit" className="btn btn-primary btn-sm" disabled={composing}>{composing ? '등록 중...' : '게시하기'}</button>
+                            </div>
                         </form>
                     )}
                 </section>
