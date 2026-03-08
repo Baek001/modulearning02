@@ -1,4 +1,4 @@
-DB_URL=jdbc:postgresql://YOUR_SUPABASE_HOST:5432/postgres?sslmode=require
+DB_URL=jdbc:postgresql://YOUR_SUPABASE_HOST:6543/postgres?sslmode=require&prepareThreshold=0
 DB_USERNAME=postgres
 DB_PASSWORD=replace-me
 JWT_SECRET_KEY=replace-with-long-random-secret

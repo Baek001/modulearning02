@@ -2,6 +2,7 @@ package kr.or.ddit.attendance.quartz;
 
 import org.quartz.JobKey;
 import org.quartz.Scheduler;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import jakarta.annotation.PostConstruct;
@@ -11,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 @Component
 @RequiredArgsConstructor
+@ConditionalOnProperty(prefix = "app.jobs.attendance", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class StartupJobExecutor {
 
     private final Scheduler scheduler;

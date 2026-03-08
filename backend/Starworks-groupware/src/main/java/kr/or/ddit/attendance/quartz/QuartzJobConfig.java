@@ -6,10 +6,12 @@ import org.quartz.JobDataMap;
 import org.quartz.JobDetail;
 import org.quartz.Trigger;
 import org.quartz.TriggerBuilder;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
+@ConditionalOnProperty(prefix = "app.jobs.attendance", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class QuartzJobConfig {
 
     @Bean

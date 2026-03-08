@@ -9,11 +9,13 @@
     "not_found_handling": "single-page-application"
   },
   "vars": {
-    "BACKEND_CONTAINER_NAME": "primary",
+    "BACKEND_CONTAINER_NAME": "primary-tx",
     "BACKEND_INTERNAL_PORT": "18080",
     "DB_DRIVER": "org.postgresql.Driver",
-    "SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE": "3",
+    "SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE": "1",
     "SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE": "0",
+    "APP_JOBS_BOARD_WORKSPACE_ENABLED": "false",
+    "APP_JOBS_ATTENDANCE_ENABLED": "false",
     "COOKIE_SECURE": "true",
     "COOKIE_SAME_SITE": "Lax",
     "COOKIE_MAX_AGE": "86400",
@@ -50,7 +52,7 @@
       "class_name": "BackendContainer",
       "image": "../backend/Starworks-groupware/Dockerfile",
       "instance_type": "basic",
-      "max_instances": 1
+      "max_instances": 2
     }
   ]
 }
