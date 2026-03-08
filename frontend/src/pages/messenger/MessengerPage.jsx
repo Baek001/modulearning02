@@ -65,7 +65,9 @@ export default function MessengerPage() {
     const roomSubscriptionRef = useRef(null);
     const updateSubscriptionRef = useRef(null);
     const roomsReloadTimerRef = useRef(null);
+    const readReceiptTimerRef = useRef(null);
     const activeRoomIdRef = useRef('');
+    const messageListRef = useRef([]);
     const messageRefs = useRef({});
     const fileInputRef = useRef(null);
 
@@ -137,6 +139,9 @@ export default function MessengerPage() {
             if (roomsReloadTimerRef.current) {
                 window.clearTimeout(roomsReloadTimerRef.current);
             }
+            if (readReceiptTimerRef.current) {
+                window.clearTimeout(readReceiptTimerRef.current);
+            }
         };
     }, []);
 
@@ -148,6 +153,10 @@ export default function MessengerPage() {
     useEffect(() => {
         activeRoomIdRef.current = activeRoomId;
     }, [activeRoomId]);
+
+    useEffect(() => {
+        messageListRef.current = messages;
+    }, [messages]);
 
     useEffect(() => {
         loadRooms();
@@ -184,7 +193,7 @@ export default function MessengerPage() {
         return () => window.removeEventListener('keydown', handleEscape);
     }, [showDetailPanel, showRoomList, messageMenuId]);
 
-    function scheduleRoomsReload(delay = 120) {
+    function scheduleRoomsReload(delay = 320) {
         if (roomsReloadTimerRef.current) {
             window.clearTimeout(roomsReloadTimerRef.current);
         }
@@ -192,6 +201,26 @@ export default function MessengerPage() {
         roomsReloadTimerRef.current = window.setTimeout(() => {
             roomsReloadTimerRef.current = null;
             loadRooms(true);
+        }, delay);
+    }
+
+    function scheduleMarkAsRead(roomId, delay = 320) {
+        if (!roomId) {
+            return;
+        }
+
+        if (readReceiptTimerRef.current) {
+            window.clearTimeout(readReceiptTimerRef.current);
+        }
+
+        readReceiptTimerRef.current = window.setTimeout(async () => {
+            readReceiptTimerRef.current = null;
+            if (activeRoomIdRef.current !== roomId) {
+                return;
+            }
+
+            await messengerAPI.markAsRead(roomId).catch(() => null);
+            scheduleRoomsReload(160);
         }, delay);
     }
 
@@ -284,12 +313,8 @@ export default function MessengerPage() {
             onConnect: () => {
                 setConnected(true);
                 updateSubscriptionRef.current?.unsubscribe();
-                updateSubscriptionRef.current = client.subscribe(`/topic/chat/update/${currentUser.userId}`, (frame) => {
-                    const payload = JSON.parse(frame.body || '{}');
+                updateSubscriptionRef.current = client.subscribe(`/topic/chat/update/${currentUser.userId}`, () => {
                     scheduleRoomsReload();
-                    if (payload?.msgrId && payload.msgrId === activeRoomIdRef.current) {
-                        refreshRoom(payload.msgrId, true, { markRead: false });
-                    }
                 });
                 if (activeRoomId) subscribeRoom(activeRoomId);
             },
@@ -305,16 +330,64 @@ export default function MessengerPage() {
         roomSubscriptionRef.current?.unsubscribe();
         roomSubscriptionRef.current = clientRef.current.subscribe(`/topic/room/${roomId}`, async (frame) => {
             const payload = JSON.parse(frame.body);
-            if (['DELETE', 'PIN', 'JOIN', 'LEAVE', 'ROOM_UPDATE'].includes(payload.type)) {
-                await refreshRoom(roomId, true, { markRead: false });
+            if (payload.type === 'DELETE') {
+                setMessages((current) => current.filter((message) => message.msgContId !== payload.msgContId));
+                setRoomDetail((current) => {
+                    if (!current || current.room?.pinnedMsgContId !== payload.msgContId) {
+                        return current;
+                    }
+
+                    return {
+                        ...current,
+                        room: {
+                            ...current.room,
+                            pinnedMsgContId: '',
+                        },
+                        pinnedMessage: null,
+                    };
+                });
                 scheduleRoomsReload();
                 return;
             }
-            setMessages((current) => [...current, payload]);
+
+            if (payload.type === 'PIN') {
+                setRoomDetail((current) => {
+                    if (!current) {
+                        return current;
+                    }
+
+                    const pinnedMessage = payload.msgContId
+                        ? messageListRef.current.find((message) => message.msgContId === payload.msgContId) || {
+                            msgContId: payload.msgContId,
+                            contents: payload.contents || '',
+                            msgTypeCd: payload.msgTypeCd || 'text',
+                            userNm: payload.userNm || '',
+                        }
+                        : null;
+
+                    return {
+                        ...current,
+                        room: {
+                            ...current.room,
+                            pinnedMsgContId: payload.msgContId || '',
+                        },
+                        pinnedMessage,
+                    };
+                });
+                scheduleRoomsReload();
+                return;
+            }
+
+            if (['JOIN', 'LEAVE', 'ROOM_UPDATE'].includes(payload.type)) {
+                await refreshRoomDetail(roomId, true);
+                scheduleRoomsReload();
+                return;
+            }
+
+            setMessages((current) => current.some((message) => message.msgContId === payload.msgContId) ? current : [...current, payload]);
             scheduleRoomsReload();
             if (payload.userId && payload.userId !== currentUser?.userId) {
-                await messengerAPI.markAsRead(roomId).catch(() => {});
-                scheduleRoomsReload(40);
+                scheduleMarkAsRead(roomId);
             }
         });
     }
@@ -336,14 +409,34 @@ export default function MessengerPage() {
                 messengerAPI.messages(roomId),
                 shouldMarkRead ? messengerAPI.markAsRead(roomId).catch(() => null) : Promise.resolve(null),
             ]);
+            if (activeRoomIdRef.current !== roomId) {
+                return;
+            }
             setRoomDetail(detailResponse.data || null);
             setMessages(asArray(messageResponse.data));
             if (shouldMarkRead) {
-                scheduleRoomsReload(40);
+                scheduleRoomsReload(160);
             }
             if (!silent) setError('');
         } catch (requestError) {
             if (!silent) setError(requestError.response?.data?.message || '대화방 정보를 불러오지 못했습니다.');
+        }
+    }
+
+    async function refreshRoomDetail(roomId, silent = false) {
+        try {
+            const response = await messengerAPI.roomDetail(roomId);
+            if (activeRoomIdRef.current !== roomId) {
+                return;
+            }
+            setRoomDetail(response.data || null);
+            if (!silent) {
+                setError('');
+            }
+        } catch (requestError) {
+            if (!silent) {
+                setError(requestError.response?.data?.message || '대화방 정보를 불러오지 못했습니다.');
+            }
         }
     }
 
@@ -417,7 +510,7 @@ export default function MessengerPage() {
         if (!nextName || !nextName.trim()) return;
         try {
             await messengerAPI.renameRoom(activeRoom.msgrId, nextName.trim());
-            await refreshRoom(activeRoom.msgrId, true, { markRead: false });
+            await refreshRoomDetail(activeRoom.msgrId, true);
             scheduleRoomsReload();
         } catch (requestError) {
             setError(requestError.response?.data?.message || '채팅방 이름 변경에 실패했습니다.');
@@ -542,7 +635,7 @@ export default function MessengerPage() {
         if (!activeRoomId) return;
         try {
             await messengerAPI.notify(activeRoomId, !roomDetail?.notifyEnabled);
-            await refreshRoom(activeRoomId, true, { markRead: false });
+            await refreshRoomDetail(activeRoomId, true);
             scheduleRoomsReload();
         } catch (requestError) {
             setError(requestError.response?.data?.message || '알림 설정 변경에 실패했습니다.');
@@ -554,7 +647,7 @@ export default function MessengerPage() {
         try {
             await messengerAPI.invite(activeRoomId, inviteUserIds);
             setInviteUserIds([]);
-            await refreshRoom(activeRoomId, true, { markRead: false });
+            await refreshRoomDetail(activeRoomId, true);
             scheduleRoomsReload();
         } catch (requestError) {
             setError(requestError.response?.data?.message || '참여자 초대에 실패했습니다.');
@@ -565,7 +658,7 @@ export default function MessengerPage() {
         if (!activeRoomId || !window.confirm('이 사용자를 대화방에서 제외하시겠습니까?')) return;
         try {
             await messengerAPI.kick(activeRoomId, userId);
-            await refreshRoom(activeRoomId, true, { markRead: false });
+            await refreshRoomDetail(activeRoomId, true);
             scheduleRoomsReload();
         } catch (requestError) {
             setError(requestError.response?.data?.message || '참여자 강퇴에 실패했습니다.');

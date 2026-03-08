@@ -124,7 +124,7 @@ export default function Topbar() {
     const clientRef = useRef(null);
     const alarmSubscriptionRef = useRef(null);
     const messageSubscriptionRef = useRef(null);
-    const messageGlobalSubscriptionRef = useRef(null);
+    const messengerPanelTimerRef = useRef(null);
     const containerRef = useRef(null);
     const [openMenu, setOpenMenu] = useState('');
     const [alarms, setAlarms] = useState([]);
@@ -173,6 +173,17 @@ export default function Topbar() {
         }
     }, []);
 
+    const scheduleMessengerPanelRefresh = useCallback((delay = 260) => {
+        if (messengerPanelTimerRef.current) {
+            window.clearTimeout(messengerPanelTimerRef.current);
+        }
+
+        messengerPanelTimerRef.current = window.setTimeout(() => {
+            messengerPanelTimerRef.current = null;
+            refreshMessengerPanel(true);
+        }, delay);
+    }, [refreshMessengerPanel]);
+
     const connectSocket = useCallback(() => {
         if (!user?.userId || clientRef.current) {
             return;
@@ -185,16 +196,12 @@ export default function Topbar() {
             onConnect: () => {
                 alarmSubscriptionRef.current?.unsubscribe();
                 messageSubscriptionRef.current?.unsubscribe();
-                messageGlobalSubscriptionRef.current?.unsubscribe();
 
                 alarmSubscriptionRef.current = client.subscribe(`/topic/notify/${user.userId}`, () => {
                     refreshAlarms(true);
                 });
                 messageSubscriptionRef.current = client.subscribe(`/topic/chat/update/${user.userId}`, () => {
-                    refreshMessengerPanel(true);
-                });
-                messageGlobalSubscriptionRef.current = client.subscribe('/topic/chat/update', () => {
-                    refreshMessengerPanel(true);
+                    scheduleMessengerPanelRefresh();
                 });
             },
             onStompError: () => {
@@ -205,7 +212,7 @@ export default function Topbar() {
 
         client.activate();
         clientRef.current = client;
-    }, [refreshAlarms, refreshMessengerPanel, user?.userId]);
+    }, [refreshAlarms, scheduleMessengerPanelRefresh, user?.userId]);
 
     useEffect(() => {
         if (!user?.userId) {
@@ -221,9 +228,11 @@ export default function Topbar() {
         return () => {
             alarmSubscriptionRef.current?.unsubscribe();
             messageSubscriptionRef.current?.unsubscribe();
-            messageGlobalSubscriptionRef.current?.unsubscribe();
             clientRef.current?.deactivate();
             clientRef.current = null;
+            if (messengerPanelTimerRef.current) {
+                window.clearTimeout(messengerPanelTimerRef.current);
+            }
         };
     }, [connectSocket, refreshAlarms, refreshMessengerPanel, user?.userId]);
 
