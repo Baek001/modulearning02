@@ -13,6 +13,7 @@ This directory runs the existing React build and Spring Boot backend behind one 
 - Supabase Storage with a public bucket is the recommended non-R2 path for this repo.
 - The Spring Boot backend runs inside Cloudflare Containers Beta.
 - A Worker serves `frontend/dist` and forwards backend paths to the container.
+- The Worker hostname is the public app URL. Pages is not required for login in this layout.
 
 ## Deploy steps
 1. Apply the PostgreSQL SQL files in `db/migration-input/ddl` to Supabase in this order:
@@ -26,14 +27,23 @@ This directory runs the existing React build and Spring Boot backend behind one 
 5. Sync the values in `.dev.vars` into Cloudflare secrets.
 6. Run `npx wrangler deploy`.
 
+Recommended public URL pattern:
+- `https://modulearning02-api.<your-workers-subdomain>.workers.dev`
+
 ## Required values
 - `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`
 - `JWT_SECRET_KEY`
 - `APP_FRONTEND_BASE_URL`, `CORS_ALLOW_ORIGINS`, `COOKIE_DOMAIN`
-- `AWS_ACCESS_KEY`, `AWS_SECRET_KEY`, `AWS_BUCKET`, `AWS_ENDPOINT`, `AWS_REGION`
+- `AWS_ACCESS_KEY`, `AWS_SECRET_KEY`, `AWS_BUCKET`, `AWS_ENDPOINT`
+- `AWS_REGION` should match the value in `wrangler.jsonc`
 - `AWS_PUBLIC_BASE_URL` if you want existing direct file links to keep working without frontend changes
 
 Non-secret defaults such as `FILE_STORAGE_MODE=s3`, `COOKIE_SAME_SITE=Lax`, and the backend port stay in `wrangler.jsonc`.
+
+When using the default `workers.dev` hostname:
+- Set `APP_FRONTEND_BASE_URL` to the Worker URL.
+- Set `CORS_ALLOW_ORIGINS` to the same Worker URL.
+- Leave `COOKIE_DOMAIN` empty so the cookie is scoped to the current host.
 
 ## Recommended storage: Supabase Storage public bucket
 Use Supabase Storage through its S3-compatible endpoint.

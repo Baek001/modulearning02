@@ -56,7 +56,15 @@ npm run secrets:sync
 npx wrangler deploy
 ```
 
-This path keeps the frontend same-origin and routes `/rest`, `/common`, `/mail`, `/chat`, `/file`, `/folder`, and `/starworks-groupware-websocket` to the Spring Boot container. The initial container config is intentionally single-instance because messenger currently uses Spring's in-memory STOMP broker.
+This path keeps the frontend and backend on one Worker hostname and routes `/rest`, `/common`, `/mail`, `/chat`, `/file`, `/folder`, and `/starworks-groupware-websocket` to the Spring Boot container. Use the Worker URL, not Pages, as the public login address. The initial container config is intentionally single-instance because messenger currently uses Spring's in-memory STOMP broker.
+
+Recommended public URL pattern:
+- `https://modulearning02-api.<your-workers-subdomain>.workers.dev`
+
+When using the default `workers.dev` hostname:
+- `APP_FRONTEND_BASE_URL` should match the Worker URL
+- `CORS_ALLOW_ORIGINS` should match the Worker URL
+- `COOKIE_DOMAIN` should be left blank so the backend issues a host-only cookie
 
 ## Cloudflare file storage options
 ### Recommended: Supabase Storage public bucket

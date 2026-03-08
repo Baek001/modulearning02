@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "starworks-app",
+  "name": "modulearning02-api",
   "main": "src/index.js",
   "compatibility_date": "2026-03-08",
   "assets": {
@@ -19,8 +19,7 @@
     "FILE_STORAGE_MODE": "s3",
     "FILE_STORAGE_URL": "/starworks_medias",
     "FORWARD_HEADERS_STRATEGY": "framework",
-    // Override this in `.dev.vars` when using Supabase Storage. `auto` is the R2-friendly default.
-    "AWS_REGION": "auto",
+    "AWS_REGION": "ap-southeast-2",
     "AWS_PATH_STYLE_ACCESS": "true",
     "APP_LOG_LEVEL": "info",
     "REQUEST_MAPPING_LOG_LEVEL": "warn",

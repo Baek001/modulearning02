@@ -2,12 +2,13 @@ DB_URL=jdbc:postgresql://YOUR_SUPABASE_HOST:5432/postgres?sslmode=require
 DB_USERNAME=postgres
 DB_PASSWORD=replace-me
 JWT_SECRET_KEY=replace-with-long-random-secret
-APP_FRONTEND_BASE_URL=https://app.example.com
-CORS_ALLOW_ORIGINS=https://app.example.com
-COOKIE_DOMAIN=app.example.com
+APP_FRONTEND_BASE_URL=https://modulearning02-api.<your-workers-subdomain>.workers.dev
+CORS_ALLOW_ORIGINS=https://modulearning02-api.<your-workers-subdomain>.workers.dev
+COOKIE_DOMAIN=
 # Keep FILE_STORAGE_MODE=s3. Supabase Storage works through the existing S3-compatible path.
 AWS_ACCESS_KEY=replace-me
 AWS_SECRET_KEY=replace-me
+# AWS_REGION is managed in wrangler.jsonc for deployed Workers.
 AWS_REGION=YOUR_SUPABASE_PROJECT_REGION
 AWS_BUCKET=starworks-files
 AWS_ENDPOINT=https://YOUR_PROJECT_REF.storage.supabase.co/storage/v1/s3

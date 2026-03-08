@@ -2,6 +2,10 @@ param(
     [string]$EnvFile = ".dev.vars"
 )
 
+$skipSecretNames = @(
+    "AWS_REGION"
+)
+
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $projectRoot = Resolve-Path (Join-Path $scriptDir "..")
 $envPath = Join-Path $projectRoot $EnvFile
@@ -24,6 +28,11 @@ foreach ($line in $lines) {
     $value = $parts[1]
 
     if ([string]::IsNullOrWhiteSpace($name)) {
+        continue
+    }
+
+    if ($skipSecretNames -contains $name) {
+        Write-Host "Skipping non-secret binding managed in wrangler config: $name"
         continue
     }
 
