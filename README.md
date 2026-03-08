@@ -47,6 +47,7 @@ npm run build
 3. Create a public Supabase Storage bucket for attachments and media.
 4. Copy [cloudflare/.dev.vars.example](cloudflare/.dev.vars.example) to `cloudflare/.dev.vars` and fill in the real Supabase, cookie, JWT, and Storage values.
    Keep `FILE_STORAGE_MODE=s3`; this repo already talks to S3-compatible storage through the AWS SDK, so Supabase Storage does not require a backend storage rewrite.
+   The current Cloudflare path expects the Supabase transaction pooler on `6543` with `prepareThreshold=0`.
 5. Deploy the Cloudflare worker and container:
 
 ```powershell
@@ -56,7 +57,16 @@ npm run secrets:sync
 npx wrangler deploy
 ```
 
-This path keeps the frontend and backend on one Worker hostname and routes `/rest`, `/common`, `/mail`, `/chat`, `/file`, `/folder`, and `/starworks-groupware-websocket` to the Spring Boot container. Use the Worker URL, not Pages, as the public login address. The initial container config is intentionally single-instance because messenger currently uses Spring's in-memory STOMP broker.
+This path keeps the frontend and backend on one Worker hostname and routes `/rest`, `/common`, `/mail`, `/chat`, `/file`, `/folder`, and `/starworks-groupware-websocket` to the Spring Boot container. Use the Worker URL, not Pages, as the public login address.
+
+Current Cloudflare production defaults:
+- Worker forwards traffic to one named backend container via `BACKEND_CONTAINER_NAME`.
+- The container application allows `max_instances=2` to avoid rollout/startup deadlocks while still using a single logical backend name.
+- Hikari pool is intentionally constrained for Supabase pooler compatibility.
+- `APP_JOBS_BOARD_WORKSPACE_ENABLED=false`
+- `APP_JOBS_ATTENDANCE_ENABLED=false`
+
+Messenger still uses Spring's in-memory STOMP simple broker. Do not introduce multiple logical backend container names or shard websocket traffic until realtime state is moved out of the container.
 
 Recommended public URL pattern:
 - `https://modulearning02-api.<your-workers-subdomain>.workers.dev`
@@ -65,6 +75,18 @@ When using the default `workers.dev` hostname:
 - `APP_FRONTEND_BASE_URL` should match the Worker URL
 - `CORS_ALLOW_ORIGINS` should match the Worker URL
 - `COOKIE_DOMAIN` should be left blank so the backend issues a host-only cookie
+
+Quick smoke check after deploy:
+
+```powershell
+cd cloudflare
+$env:BASE_URL="https://modulearning02-api.<your-workers-subdomain>.workers.dev"
+$env:LOGIN_ID="admin"
+$env:LOGIN_PASSWORD="admin1234"
+npm run smoke:auth
+```
+
+The smoke check posts to `/common/auth`, reuses the returned cookie, and verifies `/rest/mypage`.
 
 ## Cloudflare file storage options
 ### Recommended: Supabase Storage public bucket
@@ -84,6 +106,7 @@ When using the default `workers.dev` hostname:
 ## Current integration status
 - Fully live today: login, organization, project, calendar, board, attendance, meeting, mypage basics
 - Beta but real-data based: dashboard, approval, email, messenger
+- Operationally disabled in Cloudflare by default: board scheduled publishing, attendance Quartz startup/daily jobs
 
 ## Notes
 - Database initialization uses `db/migration-input/ddl/schema_postgres.sql`, `runtime_fixes_postgres.sql`, `constraints_postgres.sql`, `indexes_postgres.sql`, and `seed_sample.sql` in that order.

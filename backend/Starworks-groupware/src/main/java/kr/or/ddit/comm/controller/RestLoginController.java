@@ -1,14 +1,17 @@
 package kr.or.ddit.comm.controller;
 
+import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.AuthenticationServiceException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -27,7 +30,9 @@ import jakarta.servlet.http.HttpServletResponse;
 import kr.or.ddit.security.jwt.JwtProvider;
 import kr.or.ddit.vo.RestLoginVO;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @RestController
 @RequiredArgsConstructor
 public class RestLoginController {
@@ -53,6 +58,7 @@ public class RestLoginController {
         HttpServletRequest request,
         HttpServletResponse response
     ) {
+        String username = sanitizeUsername(restLoginVO.getUsername());
         Authentication inputToken = UsernamePasswordAuthenticationToken
             .unauthenticated(restLoginVO.getUsername(), restLoginVO.getPassword());
 
@@ -71,15 +77,25 @@ public class RestLoginController {
                 .header(HttpHeaders.SET_COOKIE, jwtCookie.toString())
                 .body(authentication);
         } catch (BadCredentialsException e) {
-            Map<String, String> errorBody = new HashMap<>();
-            errorBody.put("errorCode", "INVALID_CREDENTIALS");
-            errorBody.put("message", "아이디 또는 비밀번호가 올바르지 않습니다.");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorBody);
+            log.warn("Invalid login credentials for username={}", username);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorBody(
+                "INVALID_CREDENTIALS",
+                "아이디 또는 비밀번호가 올바르지 않습니다."
+            ));
         } catch (AuthenticationException e) {
-            Map<String, String> errorBody = new HashMap<>();
-            errorBody.put("errorCode", "LOGIN_FAILED");
-            errorBody.put("message", "인증에 실패했습니다. 관리자에게 문의하세요.");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorBody);
+            if (isAuthenticationServiceFailure(e)) {
+                log.error("Login service failure for username={}", username, e);
+                return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(errorBody(
+                    "AUTH_SERVICE_UNAVAILABLE",
+                    "로그인 서비스를 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해 주세요."
+                ));
+            }
+
+            log.warn("Login failed for username={} with type={}", username, e.getClass().getSimpleName());
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorBody(
+                "LOGIN_FAILED",
+                "인증에 실패했습니다. 관리자에게 문의하세요."
+            ));
         }
     }
 
@@ -97,6 +113,13 @@ public class RestLoginController {
             .build();
     }
 
+    private Map<String, String> errorBody(String errorCode, String message) {
+        Map<String, String> errorBody = new HashMap<>();
+        errorBody.put("errorCode", errorCode);
+        errorBody.put("message", message);
+        return errorBody;
+    }
+
     private ResponseCookie buildAccessTokenCookie(String value, long maxAge) {
         ResponseCookie.ResponseCookieBuilder builder = ResponseCookie.from("access_token", value)
             .httpOnly(true)
@@ -110,5 +133,26 @@ public class RestLoginController {
         }
 
         return builder.build();
+    }
+
+    private boolean isAuthenticationServiceFailure(Throwable error) {
+        Throwable current = error;
+        while (current != null) {
+            if (current instanceof DataAccessException || current instanceof SQLException) {
+                return true;
+            }
+            if (current instanceof AuthenticationServiceException && !(current instanceof BadCredentialsException)) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    private String sanitizeUsername(String username) {
+        if (!StringUtils.hasText(username)) {
+            return "<blank>";
+        }
+        return username.trim();
     }
 }

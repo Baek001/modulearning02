@@ -112,7 +112,18 @@ public class SpringSecurityJavaConfig {
 			@Order(1) // REST API ?꾪꽣 泥댁씤??癒쇱? ?곸슜
 			public SecurityFilterChain restSecurityFilterChain(HttpSecurity http, BearerTokenResolver cookieBearerTokenResolver) throws Exception {
 				http
-					.securityMatcher("/rest/**", "/chat/**", "/starworks-groupware-websocket", "/starworks-groupware-websocket/**")
+					.securityMatcher(
+						"/rest/**",
+						"/chat/**",
+						"/mail/counts",
+						"/mail/listData/**",
+						"/mail/toggle-importance/**",
+						"/mail/deleteSelected",
+						"/mail/deleteAll",
+						"/mail/restoreSelected",
+						"/starworks-groupware-websocket",
+						"/starworks-groupware-websocket/**"
+					)
 					.csrf(csrf->csrf.disable())
 					.cors(cors->cors.configurationSource(corsConfigSource))
 					.authorizeHttpRequests(authorize->
