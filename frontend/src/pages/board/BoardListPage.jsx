@@ -599,7 +599,7 @@ export default function BoardListPage() {
     async function deletePost() {
         if (!detailPost || !window.confirm('게시물을 삭제할까요?')) return;
         try {
-            await boardAPI.remove(detailPost.pstId);
+            await boardAPI.removeWorkspace(detailPost.pstId);
             closeDetail();
             await loadWorkspace();
         } catch (requestError) {

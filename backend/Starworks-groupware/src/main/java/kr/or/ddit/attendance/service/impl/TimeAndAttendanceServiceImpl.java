@@ -4,12 +4,15 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import kr.or.ddit.attendance.service.TimeAndAttendanceService;
 import kr.or.ddit.comm.exception.EntityNotFoundException;
@@ -88,6 +91,14 @@ public class TimeAndAttendanceServiceImpl implements TimeAndAttendanceService {
 	@Override
 	@Transactional
 	public boolean createTimeAndAttendance(String userId) {
+		String todayWorkYmd = LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE);
+		TimeAndAttendanceVO existing = mapper.selectTimeAndAttendance(userId, todayWorkYmd);
+		if (existing != null) {
+			if (existing.getWorkEndDt() == null) {
+				throw new ResponseStatusException(HttpStatus.CONFLICT, "오늘 이미 출근 처리되었습니다.");
+			}
+			throw new ResponseStatusException(HttpStatus.CONFLICT, "오늘 근태 처리가 이미 완료되었습니다.");
+		}
 
 		int wsCnt = uMapper.updateWorkStts(userId, "C101");
 
@@ -108,7 +119,11 @@ public class TimeAndAttendanceServiceImpl implements TimeAndAttendanceService {
 
 		int taaCnt = mapper.insertTimeAndAttendance(taaVO);
 
-		return wsCnt > 0 && taaCnt > 0;
+		if (wsCnt <= 0 || taaCnt <= 0) {
+			throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "출근 처리 저장에 실패했습니다.");
+		}
+
+		return true;
 	}
 
 	/**
@@ -117,9 +132,15 @@ public class TimeAndAttendanceServiceImpl implements TimeAndAttendanceService {
 	@Override
 	@Transactional
 	public boolean modifyTimeAndAttendance(TimeAndAttendanceVO taaVO) {
-		int wsCnt = uMapper.updateWorkStts(taaVO.getUserId(), "C103");
-
 		TimeAndAttendanceVO newTaaVO = mapper.selectTimeAndAttendance(taaVO.getUserId(), taaVO.getWorkYmd());
+		if (newTaaVO == null) {
+			throw new ResponseStatusException(HttpStatus.NOT_FOUND, "출근 기록을 찾을 수 없습니다.");
+		}
+		if (newTaaVO.getWorkEndDt() != null) {
+			throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 퇴근 처리되었습니다.");
+		}
+
+		int wsCnt = uMapper.updateWorkStts(taaVO.getUserId(), "C103");
 
 		LocalDateTime bgngDt = newTaaVO.getWorkBgngDt();
 		LocalDateTime endDt = LocalDateTime.now();
@@ -181,6 +202,10 @@ public class TimeAndAttendanceServiceImpl implements TimeAndAttendanceService {
 
 		int taaCnt = mapper.updateTimeAndAttendance(newTaaVO);
 
-		return wsCnt > 0 && taaCnt > 0;
+		if (wsCnt <= 0 || taaCnt <= 0) {
+			throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "퇴근 처리 저장에 실패했습니다.");
+		}
+
+		return true;
 	}
 }

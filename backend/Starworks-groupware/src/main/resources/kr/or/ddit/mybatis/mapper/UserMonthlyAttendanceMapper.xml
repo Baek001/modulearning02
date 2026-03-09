@@ -3,10 +3,10 @@
 <!--
  * == 개정이력(Modification Information) ==
  *
- *   수정일      			수정자           수정내용
- *  ============   	============== =======================
- *  2025. 10. 15.     	장어진            최초 생성
- *  2025. 10. 16.     	장어진            하위 부서 재귀적 탐색 쿼리 추가 및 수정
+ *   수정일              수정자          수정내용
+ *  ============    ============== =======================
+ *  2025. 10. 15.      허어진           최초 생성
+ *  2025. 10. 16.      허어진           하위 부서까지 검색 쿼리 추가 및 수정
  *
 -->
 <mapper namespace="kr.or.ddit.mybatis.mapper.UserMonthlyAttendanceMapper">
@@ -48,21 +48,34 @@
 
 	<select id="selectUserMonthlyAttendance" resultType="kr.or.ddit.dto.UserMonthlyAttendanceDTO">
 		SELECT
-			USER_ID
-			, USER_NM
-			, DEPT_ID
-			, WORK_MONTH
-			, WORK_DAYS
-			, TOTAL_WORK_HR
-			, LATE_COUNT
-			, EARLY_COUNT
-			, OVERTIME_COUNT
-			, TOTAL_OVERTIME_HR
-			, DEPT_NM
-			, JBGD_NM
-		FROM USER_MONTHLY_ATTENDANCE
+			U.USER_ID
+			, U.USER_NM
+			, U.DEPT_ID
+			, #{workMonth} AS WORK_MONTH
+			, CAST(COUNT(T.WORK_YMD) AS INTEGER) AS WORK_DAYS
+			, CAST(COALESCE(SUM(COALESCE(NULLIF(T.WORK_HR, ''), '0')::INTEGER), 0) AS INTEGER) AS TOTAL_WORK_HR
+			, CAST(COALESCE(SUM(CASE WHEN T.LATE_YN = 'Y' THEN 1 ELSE 0 END), 0) AS INTEGER) AS LATE_COUNT
+			, CAST(COALESCE(SUM(CASE WHEN T.EARLY_YN = 'Y' THEN 1 ELSE 0 END), 0) AS INTEGER) AS EARLY_COUNT
+			, CAST(COALESCE(SUM(CASE WHEN T.OVERTIME_YN = 'Y' THEN 1 ELSE 0 END), 0) AS INTEGER) AS OVERTIME_COUNT
+			, CAST(COALESCE(SUM(COALESCE(NULLIF(T.OVERTIME_HR, ''), '0')::INTEGER), 0) AS INTEGER) AS TOTAL_OVERTIME_HR
+			, 0 AS ABSENT_DAYS
+			, D.DEPT_NM
+			, J.JBGD_NM
+		FROM USERS U
+		LEFT OUTER JOIN DEPARTMENT D
+			ON U.DEPT_ID = D.DEPT_ID
+		LEFT OUTER JOIN JOB_GRADE J
+			ON U.JBGD_CD = J.JBGD_CD
+		LEFT OUTER JOIN TIME_AND_ATTENDANCE T
+			ON U.USER_ID = T.USER_ID
+			AND TO_CHAR(T.WORK_YMD, 'YYYY-MM') = #{workMonth}
 		WHERE
-			USER_ID = #{userId}
-			AND WORK_MONTH = #{workMonth}
+			U.USER_ID = #{userId}
+		GROUP BY
+			U.USER_ID
+			, U.USER_NM
+			, U.DEPT_ID
+			, D.DEPT_NM
+			, J.JBGD_NM
 	</select>
 </mapper>

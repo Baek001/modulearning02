@@ -57,6 +57,8 @@ public class SpringSecurityJavaConfig {
         "/login",
         "/signup",
         "/invite/accept",
+        "/actuator/health",
+        "/actuator/health/**",
         "/public/**",
         "/common/auth",
         "/actuator/health",

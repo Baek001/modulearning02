@@ -11,7 +11,7 @@
 <mapper namespace="kr.or.ddit.mybatis.mapper.TimeAndAttendanceMapper">
 	<select id="selectTimeAndAttendanceList" resultType="kr.or.ddit.vo.TimeAndAttendanceVO">
 		SELECT
-			WORK_YMD
+			TO_CHAR(WORK_YMD, 'YYYYMMDD') AS WORK_YMD
 			, USER_ID
 			, WORK_BGNG_DT
 			, WORK_END_DT
@@ -27,7 +27,7 @@
 
 	<select id="selectUserTimeAndAttendance" resultType="kr.or.ddit.vo.TimeAndAttendanceVO">
 		SELECT
-			WORK_YMD
+			TO_CHAR(WORK_YMD, 'YYYYMMDD') AS WORK_YMD
 			, USER_ID
 			, WORK_BGNG_DT
 			, WORK_END_DT
@@ -46,7 +46,7 @@
 
 	<select id="selectTimeAndAttendance" resultType="kr.or.ddit.vo.TimeAndAttendanceVO">
 		SELECT
-			WORK_YMD
+			TO_CHAR(WORK_YMD, 'YYYYMMDD') AS WORK_YMD
 			, USER_ID
 			, WORK_BGNG_DT
 			, WORK_END_DT

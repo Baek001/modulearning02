@@ -2,6 +2,15 @@
 import { useAuth } from '../../contexts/AuthContext';
 import { attendanceAPI } from '../../services/api';
 
+function normalizeWorkYmd(value) {
+    if (!value) {
+        return '';
+    }
+
+    const digits = String(value).replace(/\D/g, '');
+    return digits.length >= 8 ? digits.slice(0, 8) : '';
+}
+
 function formatDateTime(value) {
     if (!value) {
         return '-';
@@ -78,7 +87,7 @@ export default function AttendancePage() {
     const [department, setDepartment] = useState([]);
     const [history, setHistory] = useState([]);
 
-    const workYmd = today?.workYmd || getTodayWorkYmd();
+    const workYmd = normalizeWorkYmd(today?.workYmd) || getTodayWorkYmd();
     const canClockIn = !today?.workBgngDt;
     const canClockOut = Boolean(today?.workBgngDt) && !today?.workEndDt;
 
@@ -118,7 +127,7 @@ export default function AttendancePage() {
             ]);
 
             const nextHistory = historyResponse.data?.listTAA || [];
-            const todayRecord = nextHistory.find((item) => item.workYmd === getTodayWorkYmd()) || null;
+            const todayRecord = nextHistory.find((item) => normalizeWorkYmd(item.workYmd) === getTodayWorkYmd()) || null;
 
             setToday(todayRecord);
             setWeek(weekResponse.data?.uwaDTO || null);
@@ -137,10 +146,13 @@ export default function AttendancePage() {
         setError('');
 
         try {
-            await attendanceAPI.clockIn();
+            const response = await attendanceAPI.clockIn();
+            if (response.data?.success !== true) {
+                throw new Error(response.data?.message || '출근 처리에 실패했습니다.');
+            }
             await loadAttendance();
         } catch (err) {
-            setError(err.response?.data?.message || '출근 처리에 실패했습니다.');
+            setError(err.response?.data?.message || err.message || '출근 처리에 실패했습니다.');
         } finally {
             setActionLoading(false);
         }
@@ -151,10 +163,13 @@ export default function AttendancePage() {
         setError('');
 
         try {
-            await attendanceAPI.clockOut(workYmd);
+            const response = await attendanceAPI.clockOut(workYmd);
+            if (response.data?.success !== true) {
+                throw new Error(response.data?.message || '퇴근 처리에 실패했습니다.');
+            }
             await loadAttendance();
         } catch (err) {
-            setError(err.response?.data?.message || '퇴근 처리에 실패했습니다.');
+            setError(err.response?.data?.message || err.message || '퇴근 처리에 실패했습니다.');
         } finally {
             setActionLoading(false);
         }

@@ -51,6 +51,8 @@
         	ON U.USER_IMG_FILE_ID = F.FILE_ID
 		WHERE
 			PST_ID = #{pstId}
+		AND
+			COALESCE(BC.DEL_YN, 'N') = 'N'
 		ORDER BY
 			FRST_CRT_DT
 	</select>
@@ -162,6 +164,17 @@
 			DEL_YN = 'Y'
 	    WHERE
 	    	CMNT_SQN = #{cmntSqn}
+	</update>
+
+	<update id="softDeleteBoardCommentsByPstId">
+		UPDATE
+			BOARD_COMMENT
+		SET
+			DEL_YN = 'Y'
+		WHERE
+			PST_ID = #{pstId}
+		AND
+			COALESCE(DEL_YN, 'N') = 'N'
 	</update>
 
 </mapper>
