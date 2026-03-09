@@ -1,8 +1,10 @@
 package kr.or.ddit.websocket.service;
 
+import java.util.Date;
 import java.util.List;
 
 import kr.or.ddit.vo.MessengerContentVO;
+import kr.or.ddit.vo.MessengerMessagePageVO;
 import kr.or.ddit.vo.MessengerPanelVO;
 import kr.or.ddit.vo.MessengerParticipantVO;
 import kr.or.ddit.vo.MessengerRoomDetailVO;
@@ -35,7 +37,7 @@ public interface ChatService {
 
     MessengerRoomDetailVO getRoomDetail(String msgrId, String userId);
 
-    List<MessengerContentVO> getRoomMessages(String msgrId, String userId);
+    MessengerMessagePageVO getRoomMessages(String msgrId, String userId, Integer limit, Date beforeSendDt, String beforeMsgContId);
 
     List<MessengerContentVO> searchRoomMessages(String msgrId, String userId, String keyword);
 

@@ -1,9 +1,10 @@
-﻿import { Client } from '@stomp/stompjs';
+import { Client } from '@stomp/stompjs';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { communityAPI, messengerAPI } from '../../services/api';
 
+const MESSAGE_PAGE_SIZE = 50;
 const EMOJI_LIST = ['😀', '😂', '😍', '😎', '😭', '👍', '🙏', '🔥', '🎉', '✅', '💬', '📌'];
 
 function websocketUrl() {
@@ -54,6 +55,27 @@ function recentEmojiList() {
     }
 }
 
+function normalizeMessagePage(data) {
+    if (Array.isArray(data)) {
+        return {
+            items: data,
+            hasMore: false,
+            nextCursor: null,
+        };
+    }
+
+    const nextBeforeSendDt = data?.nextBeforeSendAt ? new Date(data.nextBeforeSendAt).toISOString() : '';
+    const nextBeforeMsgContId = typeof data?.nextBeforeMsgContId === 'string' ? data.nextBeforeMsgContId : '';
+
+    return {
+        items: asArray(data?.items),
+        hasMore: Boolean(data?.hasMore),
+        nextCursor: data?.hasMore && nextBeforeSendDt && nextBeforeMsgContId
+            ? { beforeSendDt: nextBeforeSendDt, beforeMsgContId: nextBeforeMsgContId }
+            : null,
+    };
+}
+
 export default function MessengerPage() {
     const { user: authUser } = useAuth();
     const navigate = useNavigate();
@@ -68,6 +90,8 @@ export default function MessengerPage() {
     const readReceiptTimerRef = useRef(null);
     const activeRoomIdRef = useRef('');
     const messageListRef = useRef([]);
+    const messageCursorRef = useRef(null);
+    const hasMoreMessagesRef = useRef(false);
     const messageRefs = useRef({});
     const fileInputRef = useRef(null);
 
@@ -77,6 +101,9 @@ export default function MessengerPage() {
     const [activeRoomId, setActiveRoomId] = useState('');
     const [roomDetail, setRoomDetail] = useState(null);
     const [messages, setMessages] = useState([]);
+    const [hasMoreMessages, setHasMoreMessages] = useState(false);
+    const [loadingMoreMessages, setLoadingMoreMessages] = useState(false);
+    const [messageCursor, setMessageCursor] = useState(null);
     const [communities, setCommunities] = useState([]);
     const [communityMembers, setCommunityMembers] = useState([]);
     const [selectedCommunityId, setSelectedCommunityId] = useState(null);
@@ -159,6 +186,14 @@ export default function MessengerPage() {
     }, [messages]);
 
     useEffect(() => {
+        messageCursorRef.current = messageCursor;
+    }, [messageCursor]);
+
+    useEffect(() => {
+        hasMoreMessagesRef.current = hasMoreMessages;
+    }, [hasMoreMessages]);
+
+    useEffect(() => {
         loadRooms();
     }, [roomScope, roomType]);
 
@@ -204,6 +239,18 @@ export default function MessengerPage() {
         }, delay);
     }
 
+    function clearRoomUnread(roomId) {
+        if (!roomId) {
+            return;
+        }
+
+        setRooms((current) => current.map((room) => (
+            room.msgrId === roomId && Number(room.unreadCount || 0) > 0
+                ? { ...room, unreadCount: 0 }
+                : room
+        )));
+    }
+
     function scheduleMarkAsRead(roomId, delay = 320) {
         if (!roomId) {
             return;
@@ -220,7 +267,7 @@ export default function MessengerPage() {
             }
 
             await messengerAPI.markAsRead(roomId).catch(() => null);
-            scheduleRoomsReload(160);
+            clearRoomUnread(roomId);
         }, delay);
     }
 
@@ -397,7 +444,7 @@ export default function MessengerPage() {
             const response = await messengerAPI.rooms({ scope: roomScope, keyword: roomKeyword || undefined, type: roomType });
             setRooms(asArray(response.data));
         } catch (requestError) {
-            if (!silent) setError(requestError.response?.data?.message || '대화방 목록을 불러오지 못했습니다.');
+            if (!silent) setError(requestError.response?.data?.message || 'Failed to load rooms.');
         }
     }
 
@@ -406,20 +453,26 @@ export default function MessengerPage() {
         try {
             const [detailResponse, messageResponse] = await Promise.all([
                 messengerAPI.roomDetail(roomId),
-                messengerAPI.messages(roomId),
+                messengerAPI.messages(roomId, { limit: MESSAGE_PAGE_SIZE }),
                 shouldMarkRead ? messengerAPI.markAsRead(roomId).catch(() => null) : Promise.resolve(null),
             ]);
             if (activeRoomIdRef.current !== roomId) {
                 return;
             }
+            const page = normalizeMessagePage(messageResponse.data);
             setRoomDetail(detailResponse.data || null);
-            setMessages(asArray(messageResponse.data));
+            setMessages(page.items);
+            setHasMoreMessages(page.hasMore);
+            setMessageCursor(page.nextCursor);
+            messageCursorRef.current = page.nextCursor;
+            hasMoreMessagesRef.current = page.hasMore;
             if (shouldMarkRead) {
-                scheduleRoomsReload(160);
+                clearRoomUnread(roomId);
             }
+            setLoadingMoreMessages(false);
             if (!silent) setError('');
         } catch (requestError) {
-            if (!silent) setError(requestError.response?.data?.message || '대화방 정보를 불러오지 못했습니다.');
+            if (!silent) setError(requestError.response?.data?.message || 'Failed to load room data.');
         }
     }
 
@@ -447,6 +500,11 @@ export default function MessengerPage() {
         setMessageMenuId('');
         setShowRoomList(false);
         setShowDetailPanel(false);
+        setHasMoreMessages(false);
+        setMessageCursor(null);
+        hasMoreMessagesRef.current = false;
+        messageCursorRef.current = null;
+        setLoadingMoreMessages(false);
         await refreshRoom(roomId);
         const nextParams = new URLSearchParams(searchParams);
         nextParams.set('room', roomId);
@@ -518,16 +576,20 @@ export default function MessengerPage() {
     }
 
     async function handleLeaveRoom() {
-        if (!activeRoom?.msgrId || !window.confirm('정말 이 대화방을 나가시겠습니까?')) return;
+        if (!activeRoom?.msgrId || !window.confirm('Leave this room now?')) return;
         try {
             await messengerAPI.leave(activeRoom.msgrId);
             setMessages([]);
+            setHasMoreMessages(false);
+            setMessageCursor(null);
+            hasMoreMessagesRef.current = false;
+            messageCursorRef.current = null;
             setRoomDetail(null);
             setActiveRoomId('');
             setShowDetailPanel(false);
             await loadRooms(true);
         } catch (requestError) {
-            setError(requestError.response?.data?.message || '채팅방 나가기에 실패했습니다.');
+            setError(requestError.response?.data?.message || 'Failed to leave the room.');
         }
     }
 
@@ -545,9 +607,110 @@ export default function MessengerPage() {
     }
 
     function handleJumpToMessage(msgContId) {
+        jumpToMessage(msgContId);
+    }
+
+    async function loadOlderMessages() {
+        if (!activeRoomIdRef.current || !messageCursorRef.current || !hasMoreMessagesRef.current || loadingMoreMessages) {
+            return;
+        }
+
+        const roomId = activeRoomIdRef.current;
+        setLoadingMoreMessages(true);
+        try {
+            const response = await messengerAPI.messages(roomId, {
+                limit: MESSAGE_PAGE_SIZE,
+                beforeSendDt: messageCursorRef.current.beforeSendDt,
+                beforeMsgContId: messageCursorRef.current.beforeMsgContId,
+            });
+            if (activeRoomIdRef.current !== roomId) {
+                return;
+            }
+
+            const page = normalizeMessagePage(response.data);
+            setMessages((current) => {
+                const existingIds = new Set(current.map((message) => message.msgContId));
+                const olderItems = page.items.filter((message) => !existingIds.has(message.msgContId));
+                return olderItems.length > 0 ? [...olderItems, ...current] : current;
+            });
+            setHasMoreMessages(page.hasMore);
+            setMessageCursor(page.nextCursor);
+            hasMoreMessagesRef.current = page.hasMore;
+            messageCursorRef.current = page.nextCursor;
+            setError('');
+        } catch (requestError) {
+            setError(requestError.response?.data?.message || 'Failed to load older messages.');
+        } finally {
+            if (activeRoomIdRef.current === roomId) {
+                setLoadingMoreMessages(false);
+            }
+        }
+    }
+
+    async function ensureMessageLoaded(msgContId) {
+        if (!msgContId) {
+            return false;
+        }
+
+        if (messageListRef.current.some((message) => message.msgContId === msgContId)) {
+            return true;
+        }
+
+        let attempts = 0;
+        while (hasMoreMessagesRef.current && messageCursorRef.current && attempts < 20) {
+            const roomId = activeRoomIdRef.current;
+            const response = await messengerAPI.messages(roomId, {
+                limit: MESSAGE_PAGE_SIZE,
+                beforeSendDt: messageCursorRef.current.beforeSendDt,
+                beforeMsgContId: messageCursorRef.current.beforeMsgContId,
+            });
+
+            if (activeRoomIdRef.current !== roomId) {
+                return false;
+            }
+
+            const page = normalizeMessagePage(response.data);
+            const targetLoaded = page.items.some((message) => message.msgContId === msgContId);
+            setMessages((current) => {
+                const existingIds = new Set(current.map((message) => message.msgContId));
+                const olderItems = page.items.filter((message) => !existingIds.has(message.msgContId));
+                const next = olderItems.length > 0 ? [...olderItems, ...current] : current;
+                messageListRef.current = next;
+                return next;
+            });
+            setHasMoreMessages(page.hasMore);
+            setMessageCursor(page.nextCursor);
+            hasMoreMessagesRef.current = page.hasMore;
+            messageCursorRef.current = page.nextCursor;
+
+            if (targetLoaded) {
+                return true;
+            }
+
+            attempts += 1;
+        }
+
+        return messageListRef.current.some((message) => message.msgContId === msgContId);
+    }
+
+    async function jumpToMessage(msgContId) {
+        if (!msgContId) {
+            return;
+        }
+
         setShowSearchPanel(false);
-        setHighlightedMessageId(msgContId);
-        requestAnimationFrame(() => messageRefs.current[msgContId]?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+        try {
+            const loaded = await ensureMessageLoaded(msgContId);
+            if (!loaded) {
+                setError('Failed to locate the selected message.');
+                return;
+            }
+
+            setHighlightedMessageId(msgContId);
+            requestAnimationFrame(() => messageRefs.current[msgContId]?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+        } catch (requestError) {
+            setError(requestError?.response?.data?.message || 'Failed to load the selected message.');
+        }
     }
 
     function handleEmojiSelect(emoji) {
@@ -953,6 +1116,13 @@ export default function MessengerPage() {
                     )}
 
                     <div className="messenger-message-stream">
+                        {activeRoom && hasMoreMessages && (
+                            <div className="messenger-history-actions">
+                                <button type="button" className="btn btn-outline" onClick={loadOlderMessages} disabled={loadingMoreMessages}>
+                                    {loadingMoreMessages ? 'Loading earlier messages...' : 'Load earlier messages'}
+                                </button>
+                            </div>
+                        )}
                         {!activeRoom ? (
                             <div className="approval-empty"><strong>대화방을 선택하세요.</strong><span>왼쪽 목록에서 방을 선택하면 실시간 대화를 시작할 수 있습니다.</span></div>
                         ) : messages.length === 0 ? (

@@ -358,7 +358,7 @@ export const messengerAPI = {
     panel: () => api.get('/chat/panel'),
     rooms: (params = {}) => api.get('/chat/rooms', { params }),
     roomDetail: (msgrId) => api.get(`/chat/room/${msgrId}`),
-    messages: (msgrId) => api.get(`/chat/room/${msgrId}/messages`),
+    messages: (msgrId, params = {}) => api.get(`/chat/room/${msgrId}/messages`, { params }),
     searchMessages: (msgrId, q) => api.get(`/chat/room/${msgrId}/search`, { params: { q } }),
     findOrCreate: (userId) => api.get('/chat/room/findOrCreate', { params: { userId } }),
     selfRoom: () => api.post('/chat/room/self'),

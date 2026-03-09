@@ -18,6 +18,19 @@ public interface MessengerRoomMapper {
 
     List<MessengerRoomVO> selectMyRooms(@Param("userId") String userId);
 
+    List<MessengerRoomVO> selectMyRoomSummaries(
+        @Param("userId") String userId,
+        @Param("scope") String scope,
+        @Param("keyword") String keyword,
+        @Param("type") String type,
+        @Param("limit") Integer limit,
+        @Param("notifyOnly") boolean notifyOnly
+    );
+
+    int countUnreadRoomsForNotifiedUser(@Param("userId") String userId);
+
+    int countUnreadMessagesForNotifiedUser(@Param("userId") String userId);
+
     MessengerRoomVO selectMyRoom(@Param("msgrId") String msgrId, @Param("userId") String userId);
 
     MessengerRoomVO findPrivateRoom(@Param("userId1") String userId1, @Param("userId2") String userId2);

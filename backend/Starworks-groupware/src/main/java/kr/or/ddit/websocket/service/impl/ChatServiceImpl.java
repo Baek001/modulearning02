@@ -1,7 +1,7 @@
 package kr.or.ddit.websocket.service.impl;
 
 import java.util.ArrayList;
-import java.util.Comparator;
+import java.util.Collections;
 import java.util.Date;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -24,6 +24,7 @@ import kr.or.ddit.mybatis.mapper.MessengerRoomMapper;
 import kr.or.ddit.mybatis.mapper.MessengerUserMapper;
 import kr.or.ddit.mybatis.mapper.UsersMapper;
 import kr.or.ddit.vo.MessengerContentVO;
+import kr.or.ddit.vo.MessengerMessagePageVO;
 import kr.or.ddit.vo.MessengerPanelVO;
 import kr.or.ddit.vo.MessengerParticipantVO;
 import kr.or.ddit.vo.MessengerRoomDetailVO;
@@ -38,6 +39,9 @@ import lombok.extern.slf4j.Slf4j;
 @Service
 @RequiredArgsConstructor
 public class ChatServiceImpl implements ChatService {
+
+    private static final int DEFAULT_MESSAGE_PAGE_SIZE = 50;
+    private static final int MAX_MESSAGE_PAGE_SIZE = 100;
 
     private final MessengerRoomMapper roomMapper;
     private final MessengerUserMapper userMapper;
@@ -85,26 +89,15 @@ public class ChatServiceImpl implements ChatService {
 
     @Override
     public List<MessengerRoomVO> getMyRooms(String userId, String scope, String keyword, String type) {
-        return roomMapper.selectMyRooms(userId).stream()
-            .filter(room -> filterByScope(room, scope))
-            .filter(room -> filterByType(room, type))
-            .filter(room -> filterByKeyword(room, keyword))
-            .sorted(Comparator
-                .comparing(MessengerRoomVO::getLastMsgDt, Comparator.nullsLast(Comparator.reverseOrder()))
-                .thenComparing(MessengerRoomVO::getCrtDt, Comparator.nullsLast(Comparator.reverseOrder())))
-            .collect(Collectors.toList());
+        return roomMapper.selectMyRoomSummaries(userId, scope, keyword, type, null, false);
     }
 
     @Override
     public MessengerPanelVO getPanel(String userId) {
-        List<MessengerRoomVO> rooms = getMyRooms(userId, "all", null, null);
         MessengerPanelVO panel = new MessengerPanelVO();
-        List<MessengerRoomVO> notifyRooms = rooms.stream()
-            .filter(room -> !"N".equalsIgnoreCase(room.getNotifyYn()))
-            .collect(Collectors.toList());
-        panel.setRooms(notifyRooms.stream().limit(8).collect(Collectors.toList()));
-        panel.setUnreadRoomCount((int) notifyRooms.stream().filter(room -> room.getUnreadCount() > 0).count());
-        panel.setUnreadMessageCount(notifyRooms.stream().mapToInt(MessengerRoomVO::getUnreadCount).sum());
+        panel.setRooms(roomMapper.selectMyRoomSummaries(userId, "all", null, null, 8, true));
+        panel.setUnreadRoomCount(roomMapper.countUnreadRoomsForNotifiedUser(userId));
+        panel.setUnreadMessageCount(roomMapper.countUnreadMessagesForNotifiedUser(userId));
         return panel;
     }
 
@@ -124,9 +117,34 @@ public class ChatServiceImpl implements ChatService {
     }
 
     @Override
-    public List<MessengerContentVO> getRoomMessages(String msgrId, String userId) {
+    public MessengerMessagePageVO getRoomMessages(String msgrId, String userId, Integer limit, Date beforeSendDt, String beforeMsgContId) {
         requireRoomMembership(msgrId, userId);
-        return enrichMessages(contentMapper.selectMessengerContentByRoomId(msgrId, userId));
+        int pageSize = normalizeMessagePageSize(limit);
+        int fetchSize = pageSize + 1;
+
+        List<MessengerContentVO> fetched = beforeSendDt == null
+            ? contentMapper.selectRecentMessengerContentByRoomId(msgrId, userId, fetchSize)
+            : contentMapper.selectOlderMessengerContentByRoomId(msgrId, userId, beforeSendDt, beforeMsgContId, fetchSize);
+
+        boolean hasMore = fetched.size() > pageSize;
+        List<MessengerContentVO> pagedItems = hasMore
+            ? new ArrayList<>(fetched.subList(0, pageSize))
+            : new ArrayList<>(fetched);
+
+        Collections.reverse(pagedItems);
+        List<MessengerContentVO> items = enrichMessages(pagedItems);
+
+        MessengerMessagePageVO page = new MessengerMessagePageVO();
+        page.setItems(items);
+        page.setHasMore(hasMore);
+        if (hasMore && !items.isEmpty()) {
+            MessengerContentVO oldestMessage = items.get(0);
+            if (oldestMessage.getSendDt() != null) {
+                page.setNextBeforeSendAt(oldestMessage.getSendDt().getTime());
+            }
+            page.setNextBeforeMsgContId(oldestMessage.getMsgContId());
+        }
+        return page;
     }
 
     @Override
@@ -373,6 +391,13 @@ public class ChatServiceImpl implements ChatService {
         return messages.stream().map(this::enrichMessage).collect(Collectors.toList());
     }
 
+    private int normalizeMessagePageSize(Integer limit) {
+        if (limit == null) {
+            return DEFAULT_MESSAGE_PAGE_SIZE;
+        }
+        return Math.max(10, Math.min(limit, MAX_MESSAGE_PAGE_SIZE));
+    }
+
     private MessengerContentVO enrichMessage(MessengerContentVO message) {
         if (message == null) {
             return null;
@@ -440,30 +465,6 @@ public class ChatServiceImpl implements ChatService {
         return new ArrayList<>(normalized);
     }
 
-    private boolean filterByScope(MessengerRoomVO room, String scope) {
-        String normalizedScope = StringUtils.defaultIfBlank(scope, "all");
-        return switch (normalizedScope) {
-            case "unread" -> room.getUnreadCount() > 0;
-            default -> true;
-        };
-    }
-
-    private boolean filterByType(MessengerRoomVO room, String type) {
-        String normalizedType = StringUtils.defaultIfBlank(type, "all");
-        if ("all".equalsIgnoreCase(normalizedType)) {
-            return true;
-        }
-        return normalizedType.equalsIgnoreCase(StringUtils.defaultIfBlank(room.getRoomTypeCd(), "group"));
-    }
-
-    private boolean filterByKeyword(MessengerRoomVO room, String keyword) {
-        if (StringUtils.isBlank(keyword)) {
-            return true;
-        }
-        String lowered = keyword.toLowerCase();
-        return StringUtils.defaultString(room.getMsgrNm()).toLowerCase().contains(lowered)
-            || StringUtils.defaultString(room.getLastMsgCont()).toLowerCase().contains(lowered);
-    }
 
     private String defaultRoomName(String roomTypeCd) {
         if ("community".equalsIgnoreCase(roomTypeCd)) {
