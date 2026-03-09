@@ -149,7 +149,7 @@
                 u.USER_ID = #{userId}
                 OR (
                     u.USER_EMAIL = (SELECT USER_EMAIL FROM USERS WHERE USER_ID = #{userId})
-                    AND COALESCE(u.USER_EMAIL, '') <> ''
+                    AND COALESCE(u.USER_EMAIL, '') &lt;&gt; ''
                 )
               )
           AND COALESCE(u.RSGNTN_YN, 'N') = 'N'

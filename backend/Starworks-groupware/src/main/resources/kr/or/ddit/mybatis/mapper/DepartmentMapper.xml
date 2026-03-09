@@ -3,14 +3,14 @@
 <mapper namespace="kr.or.ddit.mybatis.mapper.DepartmentMapper">
 
     <select id="getNextTopDeptId" resultType="String">
-        SELECT 'DP' || LPAD(COALESCE(MAX(TO_NUMBER(SUBSTR(DEPT_ID, 3, 3))), 0) + 1, 3, '0') || '000'
+        SELECT 'DP' || LPAD((COALESCE(MAX(CAST(SUBSTR(DEPT_ID, 3, 3) AS INTEGER)), 0) + 1)::TEXT, 3, '0') || '000'
         FROM DEPARTMENT
         WHERE SUBSTR(DEPT_ID, 6, 3) = '000'
     </select>
 
     <select id="getNextChildDeptId" parameterType="String" resultType="String">
         SELECT SUBSTR(#{upDeptId}, 1, 5)
-               || LPAD(COALESCE(MAX(TO_NUMBER(SUBSTR(DEPT_ID, 6, 3))), 0) + 1, 3, '0')
+               || LPAD((COALESCE(MAX(CAST(SUBSTR(DEPT_ID, 6, 3) AS INTEGER)), 0) + 1)::TEXT, 3, '0')
         FROM DEPARTMENT
         WHERE UP_DEPT_ID = #{upDeptId}
     </select>
@@ -33,10 +33,7 @@
                 SELECT COALESCE(MAX(SORT_NUM), 0) + 1
                 FROM DEPARTMENT
                 WHERE TENANT_ID IS NOT DISTINCT FROM #{tenantId}
-                  AND (
-                        (UP_DEPT_ID = #{upDeptId})
-                        OR (UP_DEPT_ID IS NULL AND #{upDeptId} IS NULL)
-                      )
+                  AND COALESCE(UP_DEPT_ID, '') = COALESCE(CAST(#{upDeptId} AS VARCHAR(80)), '')
             )
         )
     </insert>

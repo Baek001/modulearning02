@@ -115,7 +115,7 @@ export const authAPI = {
 };
 
 export const publicPlatformAPI = {
-    signupConfig: () => api.get('/public/signup/config'),
+    signupConfig: () => api.get('/public/signup/runtime-config'),
     signup: (payload) => api.post('/public/signup', payload),
     invitation: (token) => api.get(`/public/invitations/${token}`),
     acceptInvitation: (payload) => api.post('/public/invitations/accept', payload),

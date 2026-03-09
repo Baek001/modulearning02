@@ -2,6 +2,8 @@ package kr.or.ddit.tenant.controller;
 
 import java.util.Map;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -9,6 +11,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -31,22 +34,34 @@ public class PublicPlatformController {
     private final TenantPlatformService tenantPlatformService;
     private final PublicSignupGuardService publicSignupGuardService;
 
-    @GetMapping("/signup/config")
+    @GetMapping({"/signup/config", "/signup/runtime-config"})
     public PublicSignupConfigResponse signupConfig() {
         return publicSignupGuardService.readSignupConfig();
     }
 
     @PostMapping("/signup")
-    public Map<String, Object> signup(@Valid @RequestBody TenantSignupRequest request, HttpServletRequest httpServletRequest) {
-        publicSignupGuardService.validateOwnerSignup(request, httpServletRequest);
-        TenantMembershipVO membership = tenantPlatformService.signUpOwner(request);
-        log.info(
-            "Public owner signup created tenantId={} ownerEmail={} clientIp={}",
-            membership.getTenantId(),
-            request.getOwnerEmail(),
-            httpServletRequest == null ? "unknown" : httpServletRequest.getRemoteAddr()
-        );
-        return Map.of("tenant", membership);
+    public ResponseEntity<?> signup(@Valid @RequestBody TenantSignupRequest request, HttpServletRequest httpServletRequest) {
+        try {
+            publicSignupGuardService.validateOwnerSignup(request, httpServletRequest);
+            TenantMembershipVO membership = tenantPlatformService.signUpOwner(request);
+            log.info(
+                "Public owner signup created tenantId={} ownerEmail={} clientIp={}",
+                membership.getTenantId(),
+                request.getOwnerEmail(),
+                httpServletRequest == null ? "unknown" : httpServletRequest.getRemoteAddr()
+            );
+            return ResponseEntity.ok(Map.of("tenant", membership));
+        } catch (ResponseStatusException ex) {
+            throw ex;
+        } catch (RuntimeException ex) {
+            log.error("Public owner signup failed for ownerEmail={}", request.getOwnerEmail(), ex);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                Map.of(
+                    "error", "SIGNUP_FAILED",
+                    "message", "Signup failed. Please try again later."
+                )
+            );
+        }
     }
 
     @GetMapping("/invitations/{token}")

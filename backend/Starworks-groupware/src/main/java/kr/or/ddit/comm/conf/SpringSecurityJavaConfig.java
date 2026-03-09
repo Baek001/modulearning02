@@ -58,7 +58,9 @@ public class SpringSecurityJavaConfig {
         "/signup",
         "/invite/accept",
         "/public/**",
-        "/common/auth"
+        "/common/auth",
+        "/actuator/health",
+        "/actuator/health/**"
     };
 
     private final DispatcherType[] dispatcherWhitelist = {
