@@ -8,7 +8,6 @@ RUN chmod +x mvnw
 RUN ./mvnw -B dependency:go-offline
 
 COPY src/ src/
-COPY migration-input/ migration-input/
 RUN ./mvnw -B -DskipTests package
 
 FROM eclipse-temurin:21-jre
