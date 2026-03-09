@@ -46,13 +46,10 @@ public class TenantPlatformService {
         validateSignupRequest(request);
 
         String tenantId = nextId("TNT");
-        String companyName = request.getCompanyName().trim();
-        String ownerName = request.getOwnerName().trim();
         String ownerEmail = request.getOwnerEmail().trim().toLowerCase(Locale.ROOT);
-        String tenantSlug = resolveTenantSlug(request.getWorkspaceSlug(), companyName);
-        if (tenantPlatformMapper.selectTenantBySlug(tenantSlug) != null) {
-            throw new ResponseStatusException(CONFLICT, "Workspace slug is already in use.");
-        }
+        String ownerName = deriveOwnerName(ownerEmail);
+        String companyName = deriveCompanyName(ownerName);
+        String tenantSlug = resolveTenantSlug(ownerEmail);
 
         TenantVO tenant = new TenantVO();
         tenant.setTenantId(tenantId);
@@ -215,17 +212,9 @@ public class TenantPlatformService {
         if (request == null) {
             throw new ResponseStatusException(BAD_REQUEST, "Signup payload is required.");
         }
-        if (!StringUtils.hasText(request.getCompanyName())
-            || !StringUtils.hasText(request.getOwnerName())
-            || !StringUtils.hasText(request.getOwnerEmail())
+        if (!StringUtils.hasText(request.getOwnerEmail())
             || !StringUtils.hasText(request.getPassword())) {
-            throw new ResponseStatusException(BAD_REQUEST, "Company, owner, email, and password are required.");
-        }
-        if (request.getCompanyName().trim().length() < 2 || request.getCompanyName().trim().length() > 200) {
-            throw new ResponseStatusException(BAD_REQUEST, "Company name must be between 2 and 200 characters.");
-        }
-        if (request.getOwnerName().trim().length() < 2 || request.getOwnerName().trim().length() > 120) {
-            throw new ResponseStatusException(BAD_REQUEST, "Owner name must be between 2 and 120 characters.");
+            throw new ResponseStatusException(BAD_REQUEST, "Email and password are required.");
         }
         if (request.getOwnerEmail().trim().length() > 255) {
             throw new ResponseStatusException(BAD_REQUEST, "Owner email must be 255 characters or fewer.");
@@ -233,23 +222,23 @@ public class TenantPlatformService {
         if (request.getPassword().length() < 8 || request.getPassword().length() > 72) {
             throw new ResponseStatusException(BAD_REQUEST, "Password must be between 8 and 72 characters.");
         }
-        if (StringUtils.hasText(request.getWorkspaceSlug())) {
-            String normalizedSlug = normalizeSlugValue(request.getWorkspaceSlug());
-            if (!StringUtils.hasText(normalizedSlug)) {
-                throw new ResponseStatusException(BAD_REQUEST, "Workspace slug can contain only letters, numbers, and hyphens.");
-            }
-            if (normalizedSlug.length() < 3 || normalizedSlug.length() > 63) {
-                throw new ResponseStatusException(BAD_REQUEST, "Workspace slug must be between 3 and 63 characters.");
-            }
-        }
     }
 
-    private String resolveTenantSlug(String requestedSlug, String companyName) {
-        String slug = normalizeSlugValue(StringUtils.hasText(requestedSlug) ? requestedSlug : companyName);
-        if (!StringUtils.hasText(slug)) {
-            slug = "workspace-" + UUID.randomUUID().toString().replace("-", "").substring(0, 8).toLowerCase(Locale.ROOT);
+    private String resolveTenantSlug(String ownerEmail) {
+        String localPart = ownerEmail.contains("@") ? ownerEmail.substring(0, ownerEmail.indexOf('@')) : ownerEmail;
+        String slugBase = normalizeSlugValue(localPart);
+        if (!StringUtils.hasText(slugBase)) {
+            slugBase = "member";
         }
-        return slug;
+
+        for (int attempt = 0; attempt < 5; attempt++) {
+            String candidate = slugBase + "-" + UUID.randomUUID().toString().replace("-", "").substring(0, 6).toLowerCase(Locale.ROOT);
+            if (tenantPlatformMapper.selectTenantBySlug(candidate) == null) {
+                return candidate;
+            }
+        }
+
+        throw new ResponseStatusException(CONFLICT, "Unable to allocate a workspace slug for this signup.");
     }
 
     private String normalizeSlugValue(String value) {
@@ -260,6 +249,23 @@ public class TenantPlatformService {
             .toLowerCase(Locale.ROOT)
             .replaceAll("[^a-z0-9]+", "-")
             .replaceAll("^-+|-+$", "");
+    }
+
+    private String deriveOwnerName(String ownerEmail) {
+        String localPart = ownerEmail.contains("@") ? ownerEmail.substring(0, ownerEmail.indexOf('@')) : ownerEmail;
+        String normalized = localPart
+            .replaceAll("[._+-]+", " ")
+            .trim();
+        if (!StringUtils.hasText(normalized)) {
+            return "Member";
+        }
+        return normalized.length() > 120 ? normalized.substring(0, 120) : normalized;
+    }
+
+    private String deriveCompanyName(String ownerName) {
+        String normalized = StringUtils.hasText(ownerName) ? ownerName.trim() : "Test";
+        String companyName = normalized + " workspace";
+        return companyName.length() > 200 ? companyName.substring(0, 200) : companyName;
     }
 
     private String normalizeTenantRole(String tenantRoleCd) {

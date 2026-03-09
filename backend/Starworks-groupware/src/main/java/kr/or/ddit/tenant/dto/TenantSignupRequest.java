@@ -6,14 +6,6 @@ import lombok.Data;
 
 @Data
 public class TenantSignupRequest {
-    @NotBlank
-    private String companyName;
-
-    private String workspaceSlug;
-
-    @NotBlank
-    private String ownerName;
-
     @Email
     @NotBlank
     private String ownerEmail;

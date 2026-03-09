@@ -170,11 +170,12 @@ public class PublicSignupGuardService {
         if (request == null) {
             return "";
         }
-        String candidate = StringUtils.hasText(request.getWorkspaceSlug())
-            ? request.getWorkspaceSlug()
-            : request.getCompanyName();
+        String candidate = request.getOwnerEmail();
         if (!StringUtils.hasText(candidate)) {
             return "";
+        }
+        if (candidate.contains("@")) {
+            candidate = candidate.substring(0, candidate.indexOf('@'));
         }
         String normalized = candidate.trim()
             .toLowerCase(Locale.ROOT)

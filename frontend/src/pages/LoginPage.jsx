@@ -78,7 +78,7 @@ export default function LoginPage() {
                 </form>
 
                 <div style={{ marginTop: 'var(--spacing-lg)', textAlign: 'center', fontSize: 'var(--font-size-sm)' }}>
-                    처음 사용하는 회사라면 <Link to="/signup">워크스페이스 만들기</Link>
+                    테스트 계정이 없으면 <Link to="/signup">회원가입</Link>
                 </div>
             </div>
         </div>
