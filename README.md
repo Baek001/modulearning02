@@ -54,10 +54,12 @@ npm run build
 cd cloudflare
 npm install
 npm run secrets:sync
-npx wrangler deploy
+npm run deploy
 ```
 
 This path keeps the frontend and backend on one Worker hostname and routes `/rest`, `/common`, `/mail`, `/chat`, `/file`, `/folder`, and `/starworks-groupware-websocket` to the Spring Boot container. Use the Worker URL, not Pages, as the public login address.
+
+`npm run deploy` rebuilds `frontend/dist` first, which prevents Cloudflare from reusing an old frontend bundle during Worker deploys.
 
 Current Cloudflare production defaults:
 - Worker forwards traffic to one named backend container via `BACKEND_CONTAINER_NAME`.

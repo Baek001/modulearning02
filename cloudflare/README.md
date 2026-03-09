@@ -22,10 +22,26 @@ This directory runs the existing React build and Spring Boot backend behind one 
    - `constraints_postgres.sql`
    - `indexes_postgres.sql`
 2. Build the frontend bundle.
+
+```powershell
+cd ..\frontend
+npm ci
+npm run build
+cd ..\cloudflare
+```
 3. Copy `.dev.vars.example` to `.dev.vars` and fill the real values.
 4. Install the worker dependencies.
 5. Sync the values in `.dev.vars` into Cloudflare secrets.
-6. Run `npx wrangler deploy`.
+6. Run `npm run deploy`.
+
+This script rebuilds `../frontend/dist` before uploading the Worker so the public app does not serve a stale bundle.
+It also removes `dist/_redirects` so the Worker hostname does not redirect to itself.
+
+If you still keep `modulearning02.pages.dev` as a redirect entrypoint, refresh it separately:
+
+```powershell
+npm run deploy:pages
+```
 
 Recommended public URL pattern:
 - `https://modulearning02-api.<your-workers-subdomain>.workers.dev`
