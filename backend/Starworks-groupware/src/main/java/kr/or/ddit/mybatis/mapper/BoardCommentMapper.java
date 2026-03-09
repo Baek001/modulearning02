@@ -73,4 +73,6 @@ public interface BoardCommentMapper {
 	 * @return 성공한 레코드 수
 	 */
 	public int deleteBoardComment(String cmntId);
+
+	public int softDeleteBoardCommentsByPstId(String pstId);
 }

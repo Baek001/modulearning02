@@ -76,8 +76,15 @@ function backendEnvVars(env) {
 
 export class BackendContainer extends Container {
   defaultPort = 18080;
+  requiredPorts = [18080];
   sleepAfter = "20m";
-  envVars = backendEnvVars(this.env);
+  pingEndpoint = "containerstarthealthcheck/actuator/health";
+  enableInternet = true;
+
+  constructor(ctx, env) {
+    super(ctx, env);
+    this.envVars = backendEnvVars(env);
+  }
 
   onStart() {
     console.log("Backend container started");
@@ -98,21 +105,8 @@ async function forwardToBackend(request, env) {
   const backendRequest = new Request(request, { headers });
   const containerName = env.BACKEND_CONTAINER_NAME || "primary";
   const backend = env.BACKEND.getByName(containerName);
-  const backendPort = Number(env.BACKEND_INTERNAL_PORT || "18080");
 
   try {
-    await backend.startAndWaitForPorts({
-      ports: backendPort,
-      startOptions: {
-        envVars: backendEnvVars(env),
-      },
-      cancellationOptions: {
-        instanceGetTimeoutMS: 120000,
-        portReadyTimeoutMS: 120000,
-        waitInterval: 1000,
-      },
-    });
-
     return await backend.fetch(backendRequest);
   } catch (error) {
     console.error("Backend request failed", error);

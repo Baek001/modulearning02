@@ -31,7 +31,7 @@ public class PublicPlatformController {
     private final TenantPlatformService tenantPlatformService;
     private final PublicSignupGuardService publicSignupGuardService;
 
-    @GetMapping("/signup/config")
+    @GetMapping({"/signup/config", "/signup/runtime-config"})
     public PublicSignupConfigResponse signupConfig() {
         return publicSignupGuardService.readSignupConfig();
     }

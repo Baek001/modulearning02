@@ -115,7 +115,7 @@ export const authAPI = {
 };
 
 export const publicPlatformAPI = {
-    signupConfig: () => api.get('/public/signup/config'),
+    signupConfig: () => api.get('/public/signup/runtime-config'),
     signup: (payload) => api.post('/public/signup', payload),
     invitation: (token) => api.get(`/public/invitations/${token}`),
     acceptInvitation: (payload) => api.post('/public/invitations/accept', payload),
@@ -289,6 +289,7 @@ export const boardAPI = {
             'Content-Type': 'multipart/form-data',
         },
     }),
+    removeWorkspace: (pstId) => api.delete(`/rest/boards/${pstId}`),
     toggleLikePost: (pstId) => api.post(`/rest/boards/${pstId}/likes`),
     likeUsers: (pstId) => api.get(`/rest/boards/${pstId}/likes`),
     readers: (pstId) => api.get(`/rest/boards/${pstId}/readers`),

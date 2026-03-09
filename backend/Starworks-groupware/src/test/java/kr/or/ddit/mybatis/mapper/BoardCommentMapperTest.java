@@ -1,6 +1,7 @@
 package kr.or.ddit.mybatis.mapper;
 
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 
@@ -92,4 +93,12 @@ class BoardCommentMapperTest {
 		assertNotEquals(0, rowcnt);
 	}
 
+	@Test
+	void testSelectBoardCommentListExcludesDeletedComments() {
+		assertNotEquals(0, mapper.deleteBoardComment(boardComment.getCmntSqn()));
+
+		List<BoardCommentVO> boardCommentList = mapper.selectBoardCommentList(boardComment.getPstId());
+
+		assertTrue(boardCommentList.stream().noneMatch(comment -> boardComment.getCmntSqn().equals(comment.getCmntSqn())));
+	}
 }

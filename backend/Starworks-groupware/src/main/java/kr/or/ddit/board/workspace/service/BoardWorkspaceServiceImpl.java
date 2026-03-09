@@ -32,6 +32,7 @@ import kr.or.ddit.board.workspace.dto.BoardShareRequest;
 import kr.or.ddit.board.workspace.dto.BoardTodoStatusRequest;
 import kr.or.ddit.comm.exception.EntityNotFoundException;
 import kr.or.ddit.comm.file.service.FileDetailService;
+import kr.or.ddit.comm.file.service.impl.FileDeleteServiceImpl;
 import kr.or.ddit.meeting.service.MeetingReservationService;
 import kr.or.ddit.mybatis.mapper.BoardCommentMapper;
 import kr.or.ddit.mybatis.mapper.BoardMapper;
@@ -66,6 +67,7 @@ public class BoardWorkspaceServiceImpl implements BoardWorkspaceService {
     private final BoardMapper boardMapper;
     private final BoardCommentMapper boardCommentMapper;
     private final FileDetailService fileDetailService;
+    private final FileDeleteServiceImpl fileDeleteService;
     private final MeetingReservationService meetingReservationService;
     private final NotificationServiceImpl notificationService;
     private final ApplicationEventPublisher eventPublisher;
@@ -1196,6 +1198,7 @@ public class BoardWorkspaceServiceImpl implements BoardWorkspaceService {
         } catch (RuntimeException ex) {
             log.warn("Failed to remove linked meeting reservation for board {}", pstId, ex);
         }
+        cleanupBoardComments(pstId);
         deleteSubtypeRows(pstId);
         namedJdbc.update("DELETE FROM BOARD_POST_MENTION WHERE PST_ID = :pstId", Map.of("pstId", pstId));
         if (deleteReservation) {
@@ -1203,6 +1206,16 @@ public class BoardWorkspaceServiceImpl implements BoardWorkspaceService {
             namedJdbc.update("DELETE FROM BOARD_SHARE_RECIPIENT WHERE PST_ID = :pstId", Map.of("pstId", pstId));
             namedJdbc.update("DELETE FROM BOARD_SHARE WHERE PST_ID = :pstId", Map.of("pstId", pstId));
         }
+    }
+
+    private void cleanupBoardComments(String pstId) {
+        List<BoardCommentVO> comments = boardCommentMapper.selectBoardCommentList(pstId);
+        for (BoardCommentVO comment : comments) {
+            if (StringUtils.hasText(comment.getCmntFileId())) {
+                fileDeleteService.deleteFileDB(comment.getCmntFileId());
+            }
+        }
+        boardCommentMapper.softDeleteBoardCommentsByPstId(pstId);
     }
 
     private void deleteSubtypeRows(String pstId) {

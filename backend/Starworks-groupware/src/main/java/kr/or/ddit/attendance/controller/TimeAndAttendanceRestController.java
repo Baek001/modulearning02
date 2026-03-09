@@ -3,19 +3,24 @@ package kr.or.ddit.attendance.controller;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import kr.or.ddit.attendance.service.TimeAndAttendanceService;
 import kr.or.ddit.security.CustomUserDetails;
@@ -93,20 +98,22 @@ public class TimeAndAttendanceRestController {
 		}
 
 	@PostMapping
-	public Map<String, Object> createTimeAndAttendance(
+	public ResponseEntity<Map<String, Object>> createTimeAndAttendance(
 		Authentication authentication
 	){
 		CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
 		UsersVO realUser = userDetails.getRealUser();
 
-		boolean success = service.createTimeAndAttendance(realUser.getUserId());
-		Map<String, Object> result = new HashMap<>();
-		result.put("success", success);
-		return result;
+		try {
+			boolean success = service.createTimeAndAttendance(realUser.getUserId());
+			return ResponseEntity.ok(successBody(success));
+		} catch (ResponseStatusException ex) {
+			return errorResponse(ex.getStatusCode(), ex.getReason());
+		}
 	}
 
 	@PutMapping
-	public Map<String, Object> modifyTimeAndAttendance(
+	public ResponseEntity<Map<String, Object>> modifyTimeAndAttendance(
 		@RequestBody TimeAndAttendanceVO taaVO
 		, Authentication authentication
 	){
@@ -114,10 +121,49 @@ public class TimeAndAttendanceRestController {
 		UsersVO realUser = userDetails.getRealUser();
 
 		taaVO.setUserId(realUser.getUserId());
+		try {
+			taaVO.setWorkYmd(normalizeWorkYmd(taaVO.getWorkYmd()));
+			boolean success = service.modifyTimeAndAttendance(taaVO);
+			return ResponseEntity.ok(successBody(success));
+		} catch (ResponseStatusException ex) {
+			return errorResponse(ex.getStatusCode(), ex.getReason());
+		}
+	}
 
-		boolean success = service.modifyTimeAndAttendance(taaVO);
+	private String normalizeWorkYmd(String raw) {
+		if (!StringUtils.hasText(raw)) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "근무일자가 필요합니다.");
+		}
+
+		String digits = raw.replaceAll("\\D", "");
+		if (digits.length() < 8) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "근무일자 형식이 올바르지 않습니다.");
+		}
+
+		String normalized = digits.substring(0, 8);
+		try {
+			LocalDate.parse(normalized, DateTimeFormatter.BASIC_ISO_DATE);
+		} catch (DateTimeParseException ex) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "근무일자 형식이 올바르지 않습니다.", ex);
+		}
+
+		return normalized;
+	}
+
+	private ResponseEntity<Map<String, Object>> errorResponse(HttpStatusCode status, String message) {
 		Map<String, Object> result = new HashMap<>();
-		result.put("success", success);
+		result.put("success", false);
+		result.put("message", message);
+		return ResponseEntity.status(status).body(result);
+	}
+
+	private Map<String, Object> successBody(boolean success) {
+		if (!success) {
+			throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "근태 처리 저장에 실패했습니다.");
+		}
+
+		Map<String, Object> result = new HashMap<>();
+		result.put("success", true);
 		return result;
 	}
 }

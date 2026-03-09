@@ -328,7 +328,10 @@ public class DashboardServiceImpl implements DashboardService {
         String userId = currentUser.getUserId();
 
         List<DashboardWidgetItemDTO> notices = boardMapper.selectNoticeListNonPaging().stream()
-            .sorted(Comparator.comparing(BoardVO::getFrstCrtDt, Comparator.nullsLast(Comparator.reverseOrder())))
+            .sorted(
+                Comparator.comparing((BoardVO board) -> !"Y".equalsIgnoreCase(board.getFixedYn()))
+                    .thenComparing(BoardVO::getFrstCrtDt, Comparator.nullsLast(Comparator.reverseOrder()))
+            )
             .limit(5)
             .map(board -> DashboardWidgetItemDTO.builder()
                 .itemType("notice")
@@ -336,7 +339,7 @@ public class DashboardServiceImpl implements DashboardService {
                 .subtitle(defaultString(board.getUserNm(), board.getCrtUserId()))
                 .description(stripHtml(board.getContents()))
                 .badge("Y".equalsIgnoreCase(board.getFixedYn()) ? "고정" : "공지")
-                .route("/board")
+                .route("/board?postId=" + board.getPstId())
                 .createdAt(board.getFrstCrtDt())
                 .build())
             .toList();
