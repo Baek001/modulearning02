@@ -289,6 +289,7 @@ export const boardAPI = {
             'Content-Type': 'multipart/form-data',
         },
     }),
+    removeWorkspace: (pstId) => api.delete(`/rest/boards/${pstId}`),
     toggleLikePost: (pstId) => api.post(`/rest/boards/${pstId}/likes`),
     likeUsers: (pstId) => api.get(`/rest/boards/${pstId}/likes`),
     readers: (pstId) => api.get(`/rest/boards/${pstId}/readers`),
