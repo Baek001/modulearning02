@@ -1,4 +1,4 @@
-﻿import { Outlet, Navigate, useLocation } from 'react-router-dom';
+import { Outlet, Navigate, useLocation } from 'react-router-dom';
 import { useState } from 'react';
 import Sidebar from '../components/Sidebar';
 import Topbar from '../components/Topbar';
@@ -13,11 +13,11 @@ export default function MainLayout() {
         return <div className="messenger-popup-shell"><Outlet /></div>;
     }
 
-    if (loading) {
+    if (loading && !user) {
         return (
             <div className="app-loading">
                 <div className="app-loading-spinner" />
-                <p>로딩 중...</p>
+                <p>Loading...</p>
             </div>
         );
     }

@@ -1,4 +1,4 @@
-﻿import { Client } from '@stomp/stompjs';
+import { Client } from '@stomp/stompjs';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -135,6 +135,8 @@ export default function Topbar() {
     const alarmSubscriptionRef = useRef(null);
     const messageSubscriptionRef = useRef(null);
     const messengerPanelTimerRef = useRef(null);
+    const alarmPrefetchTimerRef = useRef(null);
+    const messengerPrefetchTimerRef = useRef(null);
     const containerRef = useRef(null);
     const [openMenu, setOpenMenu] = useState('');
     const [alarms, setAlarms] = useState([]);
@@ -236,18 +238,42 @@ export default function Topbar() {
         if (!user?.userId) {
             setAlarms([]);
             setMessagePanel({ rooms: [], unreadRoomCount: 0, unreadMessageCount: 0 });
+            if (alarmPrefetchTimerRef.current) {
+                window.clearTimeout(alarmPrefetchTimerRef.current);
+                alarmPrefetchTimerRef.current = null;
+            }
+            if (messengerPrefetchTimerRef.current) {
+                window.clearTimeout(messengerPrefetchTimerRef.current);
+                messengerPrefetchTimerRef.current = null;
+            }
             return undefined;
         }
 
-        refreshAlarms();
-        refreshMessengerPanel();
         connectSocket();
+
+        alarmPrefetchTimerRef.current = window.setTimeout(() => {
+            alarmPrefetchTimerRef.current = null;
+            refreshAlarms(true);
+        }, 1200);
+
+        messengerPrefetchTimerRef.current = window.setTimeout(() => {
+            messengerPrefetchTimerRef.current = null;
+            refreshMessengerPanel(true);
+        }, 2200);
 
         return () => {
             alarmSubscriptionRef.current?.unsubscribe();
             messageSubscriptionRef.current?.unsubscribe();
             clientRef.current?.deactivate();
             clientRef.current = null;
+            if (alarmPrefetchTimerRef.current) {
+                window.clearTimeout(alarmPrefetchTimerRef.current);
+                alarmPrefetchTimerRef.current = null;
+            }
+            if (messengerPrefetchTimerRef.current) {
+                window.clearTimeout(messengerPrefetchTimerRef.current);
+                messengerPrefetchTimerRef.current = null;
+            }
             if (messengerPanelTimerRef.current) {
                 window.clearTimeout(messengerPanelTimerRef.current);
             }
@@ -284,6 +310,10 @@ export default function Topbar() {
         const next = openMenu === 'alarms' ? '' : 'alarms';
         setOpenMenu(next);
         if (next === 'alarms') {
+            if (alarmPrefetchTimerRef.current) {
+                window.clearTimeout(alarmPrefetchTimerRef.current);
+                alarmPrefetchTimerRef.current = null;
+            }
             refreshAlarms();
         }
     }
@@ -292,6 +322,10 @@ export default function Topbar() {
         const next = openMenu === 'messages' ? '' : 'messages';
         setOpenMenu(next);
         if (next === 'messages') {
+            if (messengerPrefetchTimerRef.current) {
+                window.clearTimeout(messengerPrefetchTimerRef.current);
+                messengerPrefetchTimerRef.current = null;
+            }
             refreshMessengerPanel();
         }
     }

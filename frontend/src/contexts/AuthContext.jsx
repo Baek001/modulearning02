@@ -83,17 +83,24 @@ export function AuthProvider({ children }) {
             const stored = localStorage.getItem(STORAGE_KEYS.session);
             const shouldAttemptSession = Boolean(stored) || !isPublicAuthPath(window.location.pathname);
             let storedUserId = '';
+            let hydratedFromStorage = false;
 
             if (stored) {
                 try {
                     const parsedSession = JSON.parse(stored);
                     storedUserId = parsedSession?.user?.userId || '';
-                    setUser(parsedSession.user || null);
+                    const nextUser = parsedSession?.user || null;
+                    setUser(nextUser);
                     setCurrentTenant(parsedSession.currentTenant || null);
                     setMemberships(parsedSession.memberships || []);
+                    hydratedFromStorage = Boolean(nextUser);
                 } catch {
                     clearStoredSession();
                 }
+            }
+
+            if (active && hydratedFromStorage) {
+                setLoading(false);
             }
 
             if (!shouldAttemptSession) {
