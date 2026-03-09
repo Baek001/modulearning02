@@ -115,6 +115,22 @@ const formatRelative = (value) => {
 };
 
 const overlayTimestamp = (mode, item) => mode === 'likes' ? item?.crtDt : item?.readDt;
+const normalizeDetailPost = (post) => {
+    if (!post) return null;
+
+    return {
+        ...post,
+        attachments: post.attachments || [],
+        comments: post.comments || [],
+        likes: post.likes || [],
+        shareRecipients: post.shareRecipients || [],
+        mentions: post.mentions || [],
+        poll: post.poll ? { ...post.poll, options: post.poll.options || [] } : post.poll,
+        pollOptions: post.pollOptions || post.poll?.options || [],
+        schedule: post.schedule ? { ...post.schedule, attendees: post.schedule.attendees || [] } : post.schedule,
+        todo: post.todo ? { ...post.todo, assignees: post.todo.assignees || [] } : post.todo,
+    };
+};
 
 export default function BoardListPage() {
     const { user } = useAuth();
@@ -228,9 +244,37 @@ export default function BoardListPage() {
         }
     }
 
-    async function loadWorkspace() {
-        setLoading(true);
-        setError('');
+    function applyDetailState(post, { preserveCommentDraft = false, preserveCollections = false } = {}) {
+        const normalized = normalizeDetailPost(post);
+        setDetailPost((current) => {
+            if (!preserveCollections || !current || current.pstId !== normalized?.pstId) {
+                return normalized;
+            }
+
+            return {
+                ...current,
+                ...normalized,
+                comments: normalized.comments.length > 0 ? normalized.comments : (current.comments || []),
+                likes: normalized.likes.length > 0 ? normalized.likes : (current.likes || []),
+                shareRecipients: normalized.shareRecipients.length > 0 ? normalized.shareRecipients : (current.shareRecipients || []),
+                mentions: normalized.mentions.length > 0 ? normalized.mentions : (current.mentions || []),
+            };
+        });
+        setSelectedPollOptionIds((normalized?.poll?.options || []).filter((item) => item.selected).map((item) => item.optionId));
+
+        if (!preserveCommentDraft) {
+            setCommentText('');
+            setCommentFiles([]);
+            setReplyTargetId('');
+        }
+    }
+
+    async function loadWorkspaceLegacy(options = {}) {
+        const background = options.background === true;
+        if (!background) {
+            setLoading(true);
+            setError('');
+        }
         try {
             setWorkspace((await boardAPI.workspace(filters)).data || { items: [], summary: {}, pinnedItems: [], closingPolls: [], todoItems: [], page: 1, totalPages: 1 });
         } catch (requestError) {
@@ -240,7 +284,7 @@ export default function BoardListPage() {
         }
     }
 
-    async function openDetail(pstId) {
+    async function openDetailLegacy(pstId) {
         if (!pstId) return;
         setDetailLoading(true);
         setError('');
@@ -257,6 +301,71 @@ export default function BoardListPage() {
         } finally {
             setDetailLoading(false);
         }
+    }
+
+    async function loadWorkspace(options = {}) {
+        const background = options.background === true;
+        if (!background) {
+            setLoading(true);
+            setError('');
+        }
+
+        try {
+            setWorkspace((await boardAPI.workspace(filters)).data || { items: [], summary: {}, pinnedItems: [], closingPolls: [], todoItems: [], page: 1, totalPages: 1 });
+        } catch (requestError) {
+            if (!background) {
+                setError(requestError.response?.data?.message || '寃뚯떆臾쇱쓣 遺덈윭?ㅼ? 紐삵뻽?듬땲??');
+            }
+        } finally {
+            if (!background) {
+                setLoading(false);
+            }
+        }
+    }
+
+    async function loadDetail(pstId, options = {}) {
+        if (!pstId) return;
+
+        const {
+            trackEngagement = false,
+            background = false,
+            preserveCommentDraft = false,
+            preserveCollections = false,
+        } = options;
+
+        if (!background) {
+            setDetailLoading(true);
+            setError('');
+        }
+
+        try {
+            if (trackEngagement) {
+                await Promise.allSettled([dashboardAPI.markRead(pstId), boardAPI.incrementView(pstId)]);
+            }
+            const response = await boardAPI.workspaceDetail(pstId);
+            applyDetailState(response.data, { preserveCommentDraft, preserveCollections });
+        } catch (requestError) {
+            if (!background) {
+                setError(requestError.response?.data?.message || '寃뚯떆臾??곸꽭瑜?遺덈윭?ㅼ? 紐삵뻽?듬땲??');
+            }
+        } finally {
+            if (!background) {
+                setDetailLoading(false);
+            }
+        }
+    }
+
+    async function openDetail(pstId) {
+        await loadDetail(pstId, { trackEngagement: true });
+    }
+
+    async function refreshDetail(pstId, options = {}) {
+        await loadDetail(pstId, {
+            trackEngagement: false,
+            preserveCommentDraft: true,
+            preserveCollections: true,
+            ...options,
+        });
     }
 
     function closeCompose() {
@@ -420,7 +529,7 @@ export default function BoardListPage() {
         return payload;
     }
 
-    async function submitCompose(event) {
+    async function submitComposeLegacy(event) {
         event.preventDefault();
         if (!draft.pstTtl.trim() || !draft.contents.trim()) return setError('제목과 내용을 입력해 주세요.');
         if (draft.pstTypeCd === 'poll' && draft.pollOptions.filter((item) => item.trim()).length < 2) return setError('설문 옵션은 최소 두 개 이상이어야 합니다.');
@@ -469,7 +578,7 @@ export default function BoardListPage() {
         }
     }
 
-    async function toggleSave(post) {
+    async function toggleSaveLegacy(post) {
         try {
             post.saved ? await dashboardAPI.unsavePost(post.pstId) : await dashboardAPI.savePost(post.pstId);
             detailPost?.pstId === post.pstId ? await openDetail(post.pstId) : await loadWorkspace();
@@ -478,7 +587,7 @@ export default function BoardListPage() {
         }
     }
 
-    async function toggleLike(post) {
+    async function toggleLikeLegacy(post) {
         try {
             await boardAPI.toggleLikePost(post.pstId);
             detailPost?.pstId === post.pstId ? await openDetail(post.pstId) : await loadWorkspace();
@@ -498,7 +607,7 @@ export default function BoardListPage() {
         }
     }
 
-    async function submitComment(event) {
+    async function submitCommentLegacy(event) {
         event.preventDefault();
         if (!detailPost || (!commentText.trim() && commentFiles.length === 0)) return;
         try {
@@ -512,7 +621,7 @@ export default function BoardListPage() {
         }
     }
 
-    async function editComment(comment) {
+    async function editCommentLegacy(comment) {
         const nextValue = window.prompt('댓글을 수정해 주세요.', comment.contents || '');
         if (!nextValue || nextValue === comment.contents) return;
         try {
@@ -523,7 +632,7 @@ export default function BoardListPage() {
         }
     }
 
-    async function deleteComment(comment) {
+    async function deleteCommentLegacy(comment) {
         if (!window.confirm('댓글을 삭제할까요?')) return;
         try {
             await boardAPI.deleteComment(detailPost.pstId, comment.cmntSqn);
@@ -533,7 +642,7 @@ export default function BoardListPage() {
         }
     }
 
-    async function submitShare() {
+    async function submitShareLegacy() {
         if (!detailPost) return;
         if (shareDraft.userIds.length === 0 && shareDraft.communityIds.length === 0) return setError('공유 대상을 한 명 이상 선택해 주세요.');
         try {
@@ -560,7 +669,7 @@ export default function BoardListPage() {
         }
     }
 
-    async function togglePin() {
+    async function togglePinLegacy() {
         if (!detailPost) return;
         try {
             await boardAPI.pin(detailPost.pstId, detailPost.fixedYn === 'Y' ? 'N' : 'Y');
@@ -570,7 +679,7 @@ export default function BoardListPage() {
         }
     }
 
-    async function submitPollVote() {
+    async function submitPollVoteLegacy() {
         if (!detailPost || selectedPollOptionIds.length === 0) return setError('설문 항목을 선택해 주세요.');
         try {
             await boardAPI.votePoll(detailPost.pstId, selectedPollOptionIds);
@@ -580,12 +689,164 @@ export default function BoardListPage() {
         }
     }
 
-    async function updateTodoStatus(postId, assigneeUserId, statusCd) {
+    async function updateTodoStatusLegacy(postId, assigneeUserId, statusCd) {
         try {
             await boardAPI.updateTodoAssignee(postId, assigneeUserId, statusCd);
             await openDetail(postId);
         } catch (requestError) {
             setError(requestError.response?.data?.message || '할일 상태를 변경하지 못했습니다.');
+        }
+    }
+
+    async function submitCompose(event) {
+        event.preventDefault();
+        if (!draft.pstTtl.trim() || !draft.contents.trim()) return setError('?쒕ぉ怨??댁슜???낅젰??二쇱꽭??');
+        if (draft.pstTypeCd === 'poll' && draft.pollOptions.filter((item) => item.trim()).length < 2) return setError('?ㅻЦ ?듭뀡? 理쒖냼 ??媛??댁긽?댁뼱???⑸땲??');
+        if (draft.pstTypeCd === 'schedule' && (!draft.schedule.startDt || !draft.schedule.endDt)) return setError('?쇱젙???쒖옉?쇱떆? 醫낅즺?쇱떆瑜??낅젰??二쇱꽭??');
+        if (draft.pstTypeCd === 'schedule' && draft.schedule.videoMeetingYn === 'Y' && !draft.schedule.meetingRoomId) return setError('?붿긽?뚯쓽瑜?媛쒖꽕?섎젮硫??뚯쓽?ㅼ쓣 ?좏깮??二쇱꽭??');
+        if (draft.pstTypeCd === 'todo' && draft.todo.assigneeUserIds.length === 0) return setError('?좎씪 ?대떦?먮? ??紐??댁긽 ?좏깮??二쇱꽭??');
+
+        setSaving(true);
+        setError('');
+        try {
+            const payload = buildPayload();
+            if (editingPstId) {
+                const response = await boardAPI.updateWorkspace(editingPstId, payload, draftFiles);
+                const savedBoard = response.data?.board;
+                if (savedBoard) {
+                    applyDetailState(savedBoard, { preserveCollections: true });
+                    void refreshDetail(savedBoard.pstId, { background: true, preserveCollections: true });
+                } else {
+                    await refreshDetail(editingPstId, { preserveCommentDraft: false, preserveCollections: true });
+                }
+            } else {
+                const response = await boardAPI.createWorkspace(payload, draftFiles);
+                const savedBoard = response.data?.board;
+                if (savedBoard) {
+                    applyDetailState(savedBoard);
+                    void refreshDetail(savedBoard.pstId, { background: true, preserveCommentDraft: false, preserveCollections: true });
+                }
+            }
+            closeCompose();
+            void loadWorkspace({ background: true });
+        } catch (requestError) {
+            setError(requestError.response?.data?.message || '寃뚯떆臾???μ뿉 ?ㅽ뙣?덉뒿?덈떎.');
+        } finally {
+            setSaving(false);
+        }
+    }
+
+    async function toggleSave(post) {
+        try {
+            post.saved ? await dashboardAPI.unsavePost(post.pstId) : await dashboardAPI.savePost(post.pstId);
+            if (detailPost?.pstId === post.pstId) {
+                setDetailPost((current) => (current && current.pstId === post.pstId ? { ...current, saved: !current.saved } : current));
+            }
+            void loadWorkspace({ background: true });
+        } catch (requestError) {
+            setError(requestError.response?.data?.message || '愿?ш? ?곹깭瑜?蹂寃쏀븯吏 紐삵뻽?듬땲??');
+        }
+    }
+
+    async function toggleLike(post) {
+        try {
+            const response = await boardAPI.toggleLikePost(post.pstId);
+            if (detailPost?.pstId === post.pstId) {
+                setDetailPost((current) => (current && current.pstId === post.pstId
+                    ? { ...current, liked: Boolean(response.data?.liked) }
+                    : current));
+                await refreshDetail(post.pstId, { preserveCommentDraft: true, preserveCollections: true });
+            }
+            void loadWorkspace({ background: true });
+        } catch (requestError) {
+            setError(requestError.response?.data?.message || '醫뗭븘???곹깭瑜?蹂寃쏀븯吏 紐삵뻽?듬땲??');
+        }
+    }
+
+    async function submitComment(event) {
+        event.preventDefault();
+        if (!detailPost || (!commentText.trim() && commentFiles.length === 0)) return;
+        try {
+            await boardAPI.createCommentMultipart(detailPost.pstId, { pstId: detailPost.pstId, contents: commentText.trim() }, commentFiles, replyTargetId);
+            setCommentText('');
+            setCommentFiles([]);
+            setReplyTargetId('');
+            await refreshDetail(detailPost.pstId, { preserveCommentDraft: false, preserveCollections: true });
+            void loadWorkspace({ background: true });
+        } catch (requestError) {
+            setError(requestError.response?.data?.message || '?볤????깅줉?섏? 紐삵뻽?듬땲??');
+        }
+    }
+
+    async function editComment(comment) {
+        const nextValue = window.prompt('?볤????섏젙??二쇱꽭??', comment.contents || '');
+        if (!nextValue || nextValue === comment.contents) return;
+        try {
+            await boardAPI.updateComment(detailPost.pstId, comment.cmntSqn, { contents: nextValue });
+            await refreshDetail(detailPost.pstId, { preserveCommentDraft: false, preserveCollections: true });
+            void loadWorkspace({ background: true });
+        } catch (requestError) {
+            setError(requestError.response?.data?.message || '?볤????섏젙?섏? 紐삵뻽?듬땲??');
+        }
+    }
+
+    async function deleteComment(comment) {
+        if (!window.confirm('?볤?????젣?좉퉴??')) return;
+        try {
+            await boardAPI.deleteComment(detailPost.pstId, comment.cmntSqn);
+            await refreshDetail(detailPost.pstId, { preserveCommentDraft: false, preserveCollections: true });
+            void loadWorkspace({ background: true });
+        } catch (requestError) {
+            setError(requestError.response?.data?.message || '?볤?????젣?섏? 紐삵뻽?듬땲??');
+        }
+    }
+
+    async function submitShare() {
+        if (!detailPost) return;
+        if (shareDraft.userIds.length === 0 && shareDraft.communityIds.length === 0) return setError('怨듭쑀 ??곸쓣 ??紐??댁긽 ?좏깮??二쇱꽭??');
+        try {
+            const response = await boardAPI.share(detailPost.pstId, {
+                userIds: shareDraft.userIds,
+                communityIds: shareDraft.communityIds.map((communityId) => Number(communityId)),
+            });
+            setShareOpen(false);
+            setShareDraft({ userIds: [], communityIds: [] });
+            applyDetailState(response.data?.board, { preserveCollections: true });
+            void loadWorkspace({ background: true });
+        } catch (requestError) {
+            setError(requestError.response?.data?.message || '寃뚯떆臾쇱쓣 怨듭쑀?섏? 紐삵뻽?듬땲??');
+        }
+    }
+
+    async function togglePin() {
+        if (!detailPost) return;
+        try {
+            const response = await boardAPI.pin(detailPost.pstId, detailPost.fixedYn === 'Y' ? 'N' : 'Y');
+            applyDetailState(response.data, { preserveCollections: true });
+            void loadWorkspace({ background: true });
+        } catch (requestError) {
+            setError(requestError.response?.data?.message || '?곷떒怨듭? ?곹깭瑜?蹂寃쏀븯吏 紐삵뻽?듬땲??');
+        }
+    }
+
+    async function submitPollVote() {
+        if (!detailPost || selectedPollOptionIds.length === 0) return setError('?ㅻЦ ??ぉ???좏깮??二쇱꽭??');
+        try {
+            const response = await boardAPI.votePoll(detailPost.pstId, selectedPollOptionIds);
+            applyDetailState(response.data, { preserveCollections: true });
+            void loadWorkspace({ background: true });
+        } catch (requestError) {
+            setError(requestError.response?.data?.message || '?ㅻЦ ?ы몴???ㅽ뙣?덉뒿?덈떎.');
+        }
+    }
+
+    async function updateTodoStatus(postId, assigneeUserId, statusCd) {
+        try {
+            const response = await boardAPI.updateTodoAssignee(postId, assigneeUserId, statusCd);
+            applyDetailState(response.data, { preserveCollections: true });
+            void loadWorkspace({ background: true });
+        } catch (requestError) {
+            setError(requestError.response?.data?.message || '?좎씪 ?곹깭瑜?蹂寃쏀븯吏 紐삵뻽?듬땲??');
         }
     }
 

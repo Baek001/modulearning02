@@ -58,6 +58,77 @@ function badgeClass(item) {
     return 'feed-badge feed-badge-general';
 }
 
+function stripHtmlPreview(value) {
+    return String(value || '')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function buildOptimisticBoardFeedItem(board, user) {
+    if (!board) return null;
+
+    const viewCount = Number(board.viewCnt || board.viewCount || 0);
+
+    return {
+        feedId: board.pstId,
+        itemType: 'board',
+        categoryCode: board.bbsCtgrCd,
+        categoryLabel: categoryLabel(board.bbsCtgrCd),
+        createdAt: board.lastChgDt || board.frstCrtDt || new Date().toISOString(),
+        actorUserId: board.crtUserId || user?.userId,
+        actorName: board.userNm || user?.userNm || board.crtUserId || '알 수 없음',
+        actorDeptId: board.deptId || '',
+        actorDeptName: board.deptNm || user?.deptNm || '',
+        actorJobGradeName: board.jbgdNm || user?.jbgdNm || '',
+        title: board.pstTtl || '',
+        bodyPreview: stripHtmlPreview(board.contents),
+        commentCount: Array.isArray(board.comments) ? board.comments.length : 0,
+        viewCount,
+        reactionScore: viewCount,
+        route: '/board',
+        badge: categoryLabel(board.bbsCtgrCd),
+        visibility: board.bbsCtgrCd === 'F101' ? 'company' : 'community',
+        read: true,
+        saved: false,
+        mine: true,
+        commented: false,
+        fixedYn: board.fixedYn || 'N',
+    };
+}
+
+function canInsertOptimisticBoard(item, options) {
+    if (!item) return false;
+
+    const {
+        scope,
+        category,
+        page,
+        q,
+        deptId,
+    } = options;
+
+    if (page !== 1 || scope === 'unread' || scope === 'saved' || scope === 'commented' || scope === 'activity') {
+        return false;
+    }
+    if (category !== 'all' && category !== item.categoryCode) {
+        return false;
+    }
+    if (deptId && deptId !== item.actorDeptId) {
+        return false;
+    }
+    if (!q) {
+        return true;
+    }
+
+    const keyword = q.trim().toLowerCase();
+    if (!keyword) {
+        return true;
+    }
+
+    return `${item.title} ${item.bodyPreview}`.toLowerCase().includes(keyword);
+}
+
 function WidgetCard({ title, subtitle, items, emptyText, onSelect }) {
     return (
         <div className="feed-widget-card">
@@ -233,7 +304,7 @@ export default function DashboardPage() {
     useEffect(() => () => {
         window.clearTimeout(preferenceSaveTimerRef.current);
     }, []);
-    async function handleComposeSubmit(event) {
+    async function handleComposeSubmitLegacy(event) {
         event.preventDefault();
         if (!composeForm.pstTtl.trim() || !composeForm.contents.trim()) {
             setComposeError('제목과 내용을 입력해 주세요.');
@@ -246,6 +317,66 @@ export default function DashboardPage() {
             setComposeForm({ bbsCtgrCd: composeForm.bbsCtgrCd, pstTtl: '', contents: '', fixedYn: 'N' });
             updateParams({ scope: 'all', category: 'all', page: 1 });
             await Promise.all([loadFeed(), loadMeta()]);
+        } catch (requestError) {
+            setComposeError(requestError.response?.data?.message || '게시글 등록에 실패했습니다.');
+        } finally {
+            setComposing(false);
+        }
+    }
+
+    async function handleComposeSubmit(event) {
+        event.preventDefault();
+        if (!composeForm.pstTtl.trim() || !composeForm.contents.trim()) {
+            setComposeError('제목과 내용을 입력해 주세요.');
+            return;
+        }
+
+        setComposeError('');
+        setComposing(true);
+        try {
+            const response = await boardAPI.create(composeForm);
+            const savedBoard = response.data?.board;
+            const optimisticItem = buildOptimisticBoardFeedItem(savedBoard, user);
+            const shouldReloadFeed = scope !== 'all' || category !== 'all' || page !== 1;
+
+            setComposeForm({ bbsCtgrCd: composeForm.bbsCtgrCd, pstTtl: '', contents: '', fixedYn: 'N' });
+            setComposerOpen(false);
+            updateParams({ scope: 'all', category: 'all', page: 1 });
+
+            if (canInsertOptimisticBoard(optimisticItem, {
+                scope,
+                category,
+                page,
+                q,
+                deptId,
+            })) {
+                setFeed((current) => {
+                    if (!current) {
+                        return {
+                            items: optimisticItem ? [optimisticItem] : [],
+                            counts: {},
+                            departments: [],
+                            page: 1,
+                            totalPages: 1,
+                        };
+                    }
+
+                    const items = optimisticItem
+                        ? [optimisticItem, ...(current.items || []).filter((item) => item.feedId !== optimisticItem.feedId)]
+                        : (current.items || []);
+
+                    return {
+                        ...current,
+                        items,
+                        page: 1,
+                    };
+                });
+            }
+
+            if (!shouldReloadFeed) {
+                void loadFeed();
+            }
+            void loadMeta();
         } catch (requestError) {
             setComposeError(requestError.response?.data?.message || '게시글 등록에 실패했습니다.');
         } finally {

@@ -14,6 +14,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -67,6 +68,7 @@ public class BoardWorkspaceServiceImpl implements BoardWorkspaceService {
     private final FileDetailService fileDetailService;
     private final MeetingReservationService meetingReservationService;
     private final NotificationServiceImpl notificationService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     @Transactional(readOnly = true)
@@ -150,9 +152,9 @@ public class BoardWorkspaceServiceImpl implements BoardWorkspaceService {
         if (!boardService.createBoard(board)) {
             throw new IllegalStateException("게시글 등록에 실패했습니다.");
         }
-        persistBoardRelations(board, userId);
-        notifyNewBoard(board, userId);
-        return readBoardDetail(board.getPstId(), userId, admin);
+        BoardNotificationTargets notificationTargets = persistBoardRelations(board, userId);
+        publishBoardNotifications(board, userId, notificationTargets.mentionReceiverIds(), collectUrgentRecipients(board, userId));
+        return readWriteResponse(board.getPstId(), userId, admin);
     }
 
     @Override
@@ -175,8 +177,9 @@ public class BoardWorkspaceServiceImpl implements BoardWorkspaceService {
         if (!boardService.modifyBoard(board)) {
             throw new IllegalStateException("게시글 수정에 실패했습니다.");
         }
-        persistBoardRelations(board, userId);
-        return readBoardDetail(pstId, userId, admin);
+        BoardNotificationTargets notificationTargets = persistBoardRelations(board, userId);
+        publishBoardNotifications(board, userId, notificationTargets.mentionReceiverIds(), Set.of());
+        return readWriteResponse(pstId, userId, admin);
     }
 
     @Override
@@ -506,7 +509,7 @@ public class BoardWorkspaceServiceImpl implements BoardWorkspaceService {
             );
             BoardVO board = boardMapper.selectBoard(pstId);
             if (board != null) {
-                notifyNewBoard(board, board.getCrtUserId());
+                publishBoardNotifications(board, board.getCrtUserId(), Set.of(), collectUrgentRecipients(board, board.getCrtUserId()));
             }
         }
         return dueIds.size();
@@ -700,6 +703,11 @@ public class BoardWorkspaceServiceImpl implements BoardWorkspaceService {
             board.setLikes(readLikeUsersInternal(board.getPstId()));
             board.setShareRecipients(loadShareRecipients(board.getPstId()));
             board.setMentions(loadPostMentions(board.getPstId()));
+        } else {
+            board.setComments(List.of());
+            board.setLikes(List.of());
+            board.setShareRecipients(List.of());
+            board.setMentions(List.of());
         }
         return board;
     }
@@ -988,9 +996,9 @@ public class BoardWorkspaceServiceImpl implements BoardWorkspaceService {
         return defaultImportance(board);
     }
 
-    private void persistBoardRelations(BoardVO board, String userId) {
+    private BoardNotificationTargets persistBoardRelations(BoardVO board, String userId) {
         deleteSubtypeRows(board.getPstId());
-        savePostMentions(board, userId);
+        Set<String> mentionReceiverIds = savePostMentions(board, userId);
         switch (safeLower(board.getPstTypeCd())) {
             case "poll" -> savePoll(board);
             case "schedule" -> saveSchedule(board, userId);
@@ -998,6 +1006,7 @@ public class BoardWorkspaceServiceImpl implements BoardWorkspaceService {
             default -> {
             }
         }
+        return new BoardNotificationTargets(mentionReceiverIds);
     }
 
     private void savePoll(BoardVO board) {
@@ -1117,7 +1126,7 @@ public class BoardWorkspaceServiceImpl implements BoardWorkspaceService {
         }
     }
 
-    private void savePostMentions(BoardVO board, String senderId) {
+    private Set<String> savePostMentions(BoardVO board, String senderId) {
         namedJdbc.update("DELETE FROM BOARD_POST_MENTION WHERE PST_ID = :pstId", Map.of("pstId", board.getPstId()));
         Set<String> mentionUserIds = new LinkedHashSet<>(safeList(board.getMentionUserIds()));
         boolean mentionAll = Boolean.TRUE.equals(board.getMentionAll()) || String.valueOf(board.getContents()).contains("@전체");
@@ -1137,13 +1146,13 @@ public class BoardWorkspaceServiceImpl implements BoardWorkspaceService {
                 "INSERT INTO BOARD_POST_MENTION (PST_ID, USER_ID, CRT_DT) VALUES (:pstId, :userId, CURRENT_TIMESTAMP) ON CONFLICT (PST_ID, USER_ID) DO NOTHING",
                 new MapSqlParameterSource().addValue("pstId", board.getPstId()).addValue("userId", targetUserId)
             );
-            sendNotification(targetUserId, senderId, "BOARD_MENTION", board.getPstId());
         }
+        return mentionUserIds;
     }
 
-    private void notifyNewBoard(BoardVO board, String senderId) {
+    private Set<String> collectUrgentRecipients(BoardVO board, String senderId) {
         if (!"published".equalsIgnoreCase(board.getPublishStateCd()) || !"urgent".equalsIgnoreCase(board.getImportanceCd())) {
-            return;
+            return Set.of();
         }
         Set<String> receivers = new LinkedHashSet<>();
         if (board.getCommunityId() != null) {
@@ -1152,9 +1161,7 @@ public class BoardWorkspaceServiceImpl implements BoardWorkspaceService {
             receivers.addAll(namedJdbc.queryForList("SELECT USER_ID FROM USERS WHERE COALESCE(RSGNTN_YN, 'N') = 'N'", Map.of(), String.class));
         }
         receivers.remove(senderId);
-        for (String receiver : receivers) {
-            sendNotification(receiver, senderId, "BOARD_URGENT", board.getPstId());
-        }
+        return receivers;
     }
 
     private void notifyAdmins(String alarmCode, String senderId, String pstId) {
@@ -1217,6 +1224,37 @@ public class BoardWorkspaceServiceImpl implements BoardWorkspaceService {
             throw new AccessDeniedException("게시글을 조회할 수 없습니다.");
         }
         return board;
+    }
+
+    private BoardVO readWriteResponse(String pstId, String userId, boolean admin) {
+        BoardVO board = boardMapper.selectBoard(pstId);
+        if (board == null || "Y".equalsIgnoreCase(board.getDelYn())) {
+            throw new EntityNotFoundException(Map.of("pstId", pstId));
+        }
+        if (!canRead(board, userId, admin)) {
+            throw new AccessDeniedException("寃뚯떆湲??議고쉶?????놁뒿?덈떎.");
+        }
+        return hydrateBoard(board, userId, admin, false);
+    }
+
+    private void publishBoardNotifications(
+        BoardVO board,
+        String senderId,
+        Set<String> mentionReceiverIds,
+        Set<String> urgentReceiverIds
+    ) {
+        if ((mentionReceiverIds == null || mentionReceiverIds.isEmpty())
+            && (urgentReceiverIds == null || urgentReceiverIds.isEmpty())) {
+            return;
+        }
+
+        eventPublisher.publishEvent(new BoardNotificationEvent(
+            senderId,
+            board.getPstId(),
+            board.getPstTtl(),
+            mentionReceiverIds,
+            urgentReceiverIds
+        ));
     }
 
     private boolean canRead(BoardVO board, String userId, boolean admin) {
@@ -1394,6 +1432,13 @@ public class BoardWorkspaceServiceImpl implements BoardWorkspaceService {
 
     private <T> List<T> safeList(List<T> source) {
         return source == null ? List.of() : source;
+    }
+
+    private record BoardNotificationTargets(Set<String> mentionReceiverIds) {
+
+        private BoardNotificationTargets {
+            mentionReceiverIds = mentionReceiverIds == null ? Set.of() : Set.copyOf(mentionReceiverIds);
+        }
     }
 
 }
