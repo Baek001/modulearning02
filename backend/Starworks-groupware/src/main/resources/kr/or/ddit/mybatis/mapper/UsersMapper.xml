@@ -64,7 +64,7 @@
             #{userImgFileId},
             COALESCE(#{userRole}, 'ROLE_USER'),
             #{hireYmd},
-            COALESCE(#{workSttsCd}, 'C103')
+            #{workSttsCd}
         )
     </insert>
 

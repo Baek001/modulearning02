@@ -23,5 +23,7 @@ COPY --from=build /app/target/*.jar /app/app.jar
 EXPOSE 18080
 
 ENV JAVA_OPTS=""
+ENV SERVER_PORT=18080
+ENV SERVER_ADDRESS=0.0.0.0
 
-ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar /app/app.jar"]
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -Dserver.port=${SERVER_PORT:-18080} -Dserver.address=${SERVER_ADDRESS:-0.0.0.0} -jar /app/app.jar"]

@@ -9,7 +9,7 @@
     "not_found_handling": "single-page-application"
   },
   "vars": {
-    "BACKEND_CONTAINER_NAME": "primary-tx",
+    "BACKEND_CONTAINER_NAME": "primary-tx-v4",
     "BACKEND_INTERNAL_PORT": "18080",
     "DB_DRIVER": "org.postgresql.Driver",
     "SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE": "1",

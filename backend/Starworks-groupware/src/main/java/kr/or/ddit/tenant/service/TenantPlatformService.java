@@ -26,6 +26,7 @@ import kr.or.ddit.tenant.vo.TenantVO;
 import kr.or.ddit.vo.DepartmentVO;
 import kr.or.ddit.vo.UsersVO;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 import static org.springframework.http.HttpStatus.BAD_REQUEST;
 import static org.springframework.http.HttpStatus.CONFLICT;
@@ -33,6 +34,7 @@ import static org.springframework.http.HttpStatus.NOT_FOUND;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class TenantPlatformService {
 
     private final TenantPlatformMapper tenantPlatformMapper;
@@ -74,7 +76,6 @@ public class TenantPlatformService {
         owner.setUserNm(ownerName);
         owner.setUserEmail(ownerEmail);
         owner.setDeptId(deptId);
-        owner.setJbgdCd("J004");
         owner.setUserRole("ROLE_USER");
         owner.setHireYmd(LocalDate.now());
         usersMapper.insertUser(owner);
@@ -86,10 +87,8 @@ public class TenantPlatformService {
         membership.setTenantRoleCd("OWNER");
         membership.setMembershipStatusCd("ACTIVE");
         tenantPlatformMapper.insertTenantMember(membership);
-        tenantPlatformMapper.insertTenantCompanySetting(tenantId, companyName, owner.getUserId(), owner.getUserEmail());
-
-        communityService.syncOrgCommunities(tenantId, owner.getUserId(), true);
-        return tenantPlatformMapper.selectMembershipByUserIdAndTenant(owner.getUserId(), tenantId);
+        createTenantCompanySettingSafely(tenantId, companyName, owner.getUserId(), owner.getUserEmail());
+        return buildMembershipResponse(tenant, rootDepartment, owner, membership.getTenantRoleCd(), membership.getMembershipStatusCd());
     }
 
     @Transactional
@@ -144,7 +143,6 @@ public class TenantPlatformService {
         user.setUserNm(request.getUserNm().trim());
         user.setUserEmail(request.getUserEmail().trim().toLowerCase(Locale.ROOT));
         user.setDeptId(deptId);
-        user.setJbgdCd("J001");
         user.setUserRole("ROLE_USER");
         user.setHireYmd(LocalDate.now());
         usersMapper.insertUser(user);
@@ -156,9 +154,9 @@ public class TenantPlatformService {
         membership.setMembershipStatusCd("ACTIVE");
         tenantPlatformMapper.insertTenantMember(membership);
         tenantPlatformMapper.acceptInvitation(invitation.getInvitationId(), user.getUserId());
-        communityService.syncOrgCommunities(invitation.getTenantId(), user.getUserId(), true);
-
-        return tenantPlatformMapper.selectMembershipByUserIdAndTenant(user.getUserId(), invitation.getTenantId());
+        TenantVO tenant = tenantPlatformMapper.selectTenantById(invitation.getTenantId());
+        DepartmentVO rootDepartment = departmentMapper.selectDepartmentByTenant(invitation.getTenantId(), deptId);
+        return buildMembershipResponse(tenant, rootDepartment, user, membership.getTenantRoleCd(), membership.getMembershipStatusCd());
     }
 
     @Transactional(readOnly = true)
@@ -274,6 +272,44 @@ public class TenantPlatformService {
             case "OWNER", "ADMIN" -> role;
             default -> "MEMBER";
         };
+    }
+
+    private void syncOrgCommunitiesSafely(String tenantId, String userId) {
+        try {
+            communityService.syncOrgCommunities(tenantId, userId, true);
+        } catch (RuntimeException ex) {
+            log.warn("Skipping org community sync for tenantId={} during tenant bootstrap", tenantId, ex);
+        }
+    }
+
+    private void createTenantCompanySettingSafely(String tenantId, String companyName, String userId, String senderEmail) {
+        try {
+            tenantPlatformMapper.insertTenantCompanySetting(tenantId, companyName, userId, senderEmail);
+        } catch (RuntimeException ex) {
+            log.warn("Skipping company setting bootstrap for tenantId={}", tenantId, ex);
+        }
+    }
+
+    private TenantMembershipVO buildMembershipResponse(
+        TenantVO tenant,
+        DepartmentVO department,
+        UsersVO user,
+        String tenantRoleCd,
+        String membershipStatusCd
+    ) {
+        TenantMembershipVO response = new TenantMembershipVO();
+        response.setTenantId(tenant == null ? user.getTenantId() : tenant.getTenantId());
+        response.setTenantNm(tenant == null ? null : tenant.getTenantNm());
+        response.setTenantSlug(tenant == null ? null : tenant.getTenantSlug());
+        response.setUserId(user.getUserId());
+        response.setLoginId(StringUtils.hasText(user.getLoginId()) ? user.getLoginId() : user.getUserId());
+        response.setUserNm(user.getUserNm());
+        response.setUserEmail(user.getUserEmail());
+        response.setDeptId(user.getDeptId());
+        response.setDeptNm(department == null ? null : department.getDeptNm());
+        response.setTenantRoleCd(tenantRoleCd);
+        response.setMembershipStatusCd(membershipStatusCd);
+        return response;
     }
 
     private String nextId(String prefix) {

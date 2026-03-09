@@ -76,8 +76,15 @@ function backendEnvVars(env) {
 
 export class BackendContainer extends Container {
   defaultPort = 18080;
+  requiredPorts = [18080];
   sleepAfter = "20m";
-  envVars = backendEnvVars(this.env);
+  pingEndpoint = "containerstarthealthcheck/actuator/health";
+  enableInternet = true;
+
+  constructor(ctx, env) {
+    super(ctx, env);
+    this.envVars = backendEnvVars(env);
+  }
 
   onStart() {
     console.log("Backend container started");
