@@ -21,6 +21,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import kr.or.ddit.contract.service.ContractService;
+import kr.or.ddit.security.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
 
 @RestController
@@ -33,7 +34,7 @@ public class ContractRestController {
 
     @GetMapping("/dashboard")
     public Map<String, Object> dashboard(Authentication authentication) {
-        return contractService.readDashboard(authentication.getName(), isAdmin(authentication));
+        return contractService.readDashboard(authentication.getName(), isAdmin(authentication), tenantId(authentication));
     }
 
     @GetMapping("/templates")
@@ -119,12 +120,12 @@ public class ContractRestController {
 
     @GetMapping("/company-settings")
     public Map<String, Object> companySettings(Authentication authentication) {
-        return contractService.readCompanySettings(authentication.getName(), isAdmin(authentication));
+        return contractService.readCompanySettings(authentication.getName(), isAdmin(authentication), tenantId(authentication));
     }
 
     @PutMapping(value = "/company-settings", consumes = MediaType.APPLICATION_JSON_VALUE)
     public Map<String, Object> updateCompanySettingsJson(@RequestBody Map<String, Object> body, Authentication authentication) {
-        return contractService.updateCompanySettings(body, null, authentication.getName(), isAdmin(authentication));
+        return contractService.updateCompanySettings(body, null, authentication.getName(), isAdmin(authentication), tenantId(authentication));
     }
 
     @PutMapping(value = "/company-settings", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -134,12 +135,12 @@ public class ContractRestController {
         Authentication authentication
     ) throws IOException {
         Map<String, Object> body = objectMapper.readValue(payload, new TypeReference<Map<String, Object>>() {});
-        return contractService.updateCompanySettings(body, sealFile, authentication.getName(), isAdmin(authentication));
+        return contractService.updateCompanySettings(body, sealFile, authentication.getName(), isAdmin(authentication), tenantId(authentication));
     }
 
     @GetMapping
     public Map<String, Object> contracts(@RequestParam Map<String, String> params, Authentication authentication) {
-        return contractService.readContracts(authentication.getName(), isAdmin(authentication), params);
+        return contractService.readContracts(authentication.getName(), isAdmin(authentication), params, tenantId(authentication));
     }
 
     @GetMapping("/{contractId}")
@@ -149,7 +150,7 @@ public class ContractRestController {
 
     @PostMapping
     public Map<String, Object> createContract(@RequestBody Map<String, Object> body, Authentication authentication) {
-        return contractService.createContract(body, authentication.getName(), isAdmin(authentication));
+        return contractService.createContract(body, authentication.getName(), isAdmin(authentication), tenantId(authentication));
     }
 
     @PostMapping("/{contractId}/send")
@@ -174,7 +175,7 @@ public class ContractRestController {
 
     @PostMapping("/batches")
     public Map<String, Object> createBatch(@RequestBody Map<String, Object> body, Authentication authentication) {
-        return contractService.createBatch(body, authentication.getName(), isAdmin(authentication));
+        return contractService.createBatch(body, authentication.getName(), isAdmin(authentication), tenantId(authentication));
     }
 
     @GetMapping("/batches/{batchId}")
@@ -187,5 +188,12 @@ public class ContractRestController {
             && authentication.getAuthorities() != null
             && authentication.getAuthorities().stream()
                 .anyMatch(authority -> "ROLE_ADMIN".equalsIgnoreCase(authority.getAuthority()) || "ADMIN".equalsIgnoreCase(authority.getAuthority()));
+    }
+
+    private String tenantId(Authentication authentication) {
+        if (authentication != null && authentication.getPrincipal() instanceof CustomUserDetails userDetails) {
+            return userDetails.getTenantId();
+        }
+        return null;
     }
 }

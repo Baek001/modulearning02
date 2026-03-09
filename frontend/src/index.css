@@ -674,10 +674,31 @@ img {
 }
 
 .topbar-dropdown {
-  width: 200px;
+  width: 280px;
   padding: 8px;
   display: grid;
   gap: 4px;
+}
+
+.topbar-dropdown-section {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--gray-100);
+  margin-bottom: 4px;
+}
+
+.topbar-dropdown-label {
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  color: var(--gray-500);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.topbar-dropdown-help {
+  font-size: var(--font-size-xs);
+  color: var(--gray-500);
 }
 
 .topbar-dropdown-item {
@@ -1051,6 +1072,14 @@ textarea.form-input,
   font-size: var(--font-size-xs);
   color: var(--gray-500);
   line-height: 1.5;
+}
+
+.turnstile-shell {
+  min-height: 66px;
+  padding: var(--spacing-sm);
+  border: 1px solid var(--gray-200);
+  border-radius: 12px;
+  background: var(--gray-50);
 }
 
 .form-static {

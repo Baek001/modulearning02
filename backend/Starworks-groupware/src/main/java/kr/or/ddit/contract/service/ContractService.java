@@ -117,6 +117,13 @@ public class ContractService {
         }
     }
 
+    private String requireTenantId(String tenantId) {
+        if (StringUtils.isBlank(tenantId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Tenant context is required.");
+        }
+        return tenantId.trim();
+    }
+
     private int queryCount(String sql, MapSqlParameterSource params) {
         Integer count = namedJdbc.queryForObject(sql, params, Integer.class);
         return count == null ? 0 : count;
@@ -254,10 +261,11 @@ public class ContractService {
     }
 
     @Transactional
-    public Map<String, Object> readDashboard(String userId, boolean admin) {
+    public Map<String, Object> readDashboard(String userId, boolean admin, String tenantId) {
         expireOutdatedContracts();
         MapSqlParameterSource params = accessParams(userId, admin);
         String whereClause = contractAccessWhere();
+        String resolvedTenantId = requireTenantId(tenantId);
 
         Map<String, Object> counts = new LinkedHashMap<>();
         counts.put("draft", queryCount("SELECT COUNT(*) FROM CONTRACT_DOCUMENT D WHERE " + whereClause + " AND D.STATUS_CD IN ('draft', 'ready')", params));
@@ -289,7 +297,7 @@ public class ContractService {
         response.put("recentContracts", recentContracts);
         response.put("templates", readTemplates(userId, admin).stream().limit(6).toList());
         response.put("templateRequests", readTemplateRequests(userId, admin).stream().limit(6).toList());
-        response.put("companySettings", readCompanySettingsInternal());
+        response.put("companySettings", readCompanySettingsInternal(resolvedTenantId));
         return response;
     }
 
@@ -343,19 +351,19 @@ public class ContractService {
     }
 
     @Transactional(readOnly = true)
-    public Map<String, Object> readCompanySettings(String userId, boolean admin) {
+    public Map<String, Object> readCompanySettings(String userId, boolean admin, String tenantId) {
         requireAdmin(admin);
-        return readCompanySettingsInternal();
+        return readCompanySettingsInternal(requireTenantId(tenantId));
     }
 
-    private Map<String, Object> readCompanySettingsInternal() {
-        Long settingId = ensureCompanySettingsRow("system");
+    private Map<String, Object> readCompanySettingsInternal(String tenantId) {
+        Long settingId = ensureCompanySettingsRow(requireTenantId(tenantId), "system");
         List<Map<String, Object>> rows = namedJdbc.queryForList(
-            "SELECT SETTING_ID AS settingId, COMPANY_NM AS companyNm, SENDER_NM AS senderNm, SENDER_EMAIL AS senderEmail, SENDER_TELNO AS senderTelno, " +
+            "SELECT TENANT_ID AS tenantId, SETTING_ID AS settingId, COMPANY_NM AS companyNm, SENDER_NM AS senderNm, SENDER_EMAIL AS senderEmail, SENDER_TELNO AS senderTelno, " +
                 "PROVIDER_NM AS providerNm, CHECKLIST_JSON AS checklistJson, NOTE_TEXT AS noteText, GUIDE_ACK_YN AS guideAckYn, ADMIN_READY_YN AS adminReadyYn, " +
                 "SEAL_FILE_ID AS sealFileId, CRT_DT AS crtDt, LAST_CHG_DT AS lastChgDt, LAST_CHG_USER_ID AS lastChgUserId " +
-            "FROM CONTRACT_COMPANY_SETTING WHERE SETTING_ID = :settingId",
-            Map.of("settingId", settingId)
+            "FROM CONTRACT_COMPANY_SETTING WHERE TENANT_ID = :tenantId AND SETTING_ID = :settingId",
+            Map.of("tenantId", tenantId, "settingId", settingId)
         );
         if (rows.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Company settings are unavailable.");
@@ -363,15 +371,19 @@ public class ContractService {
         return normalizeCompanySettings(rows.get(0));
     }
 
-    private Long ensureCompanySettingsRow(String userId) {
-        List<Long> ids = namedJdbc.queryForList("SELECT SETTING_ID FROM CONTRACT_COMPANY_SETTING ORDER BY SETTING_ID ASC LIMIT 1", Map.of(), Long.class);
+    private Long ensureCompanySettingsRow(String tenantId, String userId) {
+        List<Long> ids = namedJdbc.queryForList(
+            "SELECT SETTING_ID FROM CONTRACT_COMPANY_SETTING WHERE TENANT_ID = :tenantId ORDER BY SETTING_ID ASC LIMIT 1",
+            Map.of("tenantId", tenantId),
+            Long.class
+        );
         if (!ids.isEmpty()) {
             return ids.get(0);
         }
         return namedJdbc.queryForObject(
-            "INSERT INTO CONTRACT_COMPANY_SETTING (COMPANY_NM, SENDER_NM, SENDER_EMAIL, SENDER_TELNO, PROVIDER_NM, CRT_USER_ID, CRT_DT, LAST_CHG_DT, GUIDE_ACK_YN, ADMIN_READY_YN) " +
-                "VALUES ('\\uBAA8\\uB450\\uC758 \\uB7EC\\uB2DD', '\\uAD00\\uB9AC\\uC790', 'admin@modulearning.local', '010-0000-0000', 'internal', :userId, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'N', 'N') RETURNING SETTING_ID",
-            Map.of("userId", userId),
+            "INSERT INTO CONTRACT_COMPANY_SETTING (TENANT_ID, COMPANY_NM, SENDER_NM, SENDER_EMAIL, SENDER_TELNO, PROVIDER_NM, CRT_USER_ID, LAST_CHG_USER_ID, CRT_DT, LAST_CHG_DT, GUIDE_ACK_YN, ADMIN_READY_YN) " +
+                "VALUES (:tenantId, '\\uBAA8\\uB450\\uC758 \\uB7EC\\uB2DD', '\\uAD00\\uB9AC\\uC790', 'admin@modulearning.local', '010-0000-0000', 'internal', :userId, :userId, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'N', 'N') RETURNING SETTING_ID",
+            Map.of("tenantId", tenantId, "userId", userId),
             Long.class
         );
     }
@@ -597,15 +609,17 @@ public class ContractService {
     }
 
     @Transactional
-    public Map<String, Object> updateCompanySettings(Map<String, Object> payload, MultipartFile sealFile, String userId, boolean admin) {
+    public Map<String, Object> updateCompanySettings(Map<String, Object> payload, MultipartFile sealFile, String userId, boolean admin, String tenantId) {
         requireAdmin(admin);
-        Long settingId = ensureCompanySettingsRow(userId);
+        String resolvedTenantId = requireTenantId(tenantId);
+        Long settingId = ensureCompanySettingsRow(resolvedTenantId, userId);
         namedJdbc.update(
             "UPDATE CONTRACT_COMPANY_SETTING SET COMPANY_NM = :companyNm, SENDER_NM = :senderNm, SENDER_EMAIL = :senderEmail, SENDER_TELNO = :senderTelno, PROVIDER_NM = :providerNm, " +
                 "CHECKLIST_JSON = :checklistJson, NOTE_TEXT = :noteText, GUIDE_ACK_YN = :guideAckYn, ADMIN_READY_YN = :adminReadyYn, SEAL_FILE_ID = :sealFileId, " +
-                "LAST_CHG_DT = CURRENT_TIMESTAMP, LAST_CHG_USER_ID = :userId WHERE SETTING_ID = :settingId",
+                "LAST_CHG_DT = CURRENT_TIMESTAMP, LAST_CHG_USER_ID = :userId WHERE TENANT_ID = :tenantId AND SETTING_ID = :settingId",
             new MapSqlParameterSource()
                 .addValue("settingId", settingId)
+                .addValue("tenantId", resolvedTenantId)
                 .addValue("companyNm", blankToNull(payload.get("companyNm")))
                 .addValue("senderNm", blankToNull(payload.get("senderNm")))
                 .addValue("senderEmail", blankToNull(payload.get("senderEmail")))
@@ -618,11 +632,11 @@ public class ContractService {
                 .addValue("sealFileId", resolveUploadedFileId(sealFile, stringValue(payload.get("sealFileId")), FileFolderType.CONTRACT.toString() + "/company"))
                 .addValue("userId", userId)
         );
-        return readCompanySettingsInternal();
+        return readCompanySettingsInternal(resolvedTenantId);
     }
 
     @Transactional
-    public Map<String, Object> readContracts(String userId, boolean admin, Map<String, String> params) {
+    public Map<String, Object> readContracts(String userId, boolean admin, Map<String, String> params, String tenantId) {
         expireOutdatedContracts();
         MapSqlParameterSource queryParams = accessParams(userId, admin);
         StringBuilder where = new StringBuilder(contractAccessWhere());
@@ -675,7 +689,7 @@ public class ContractService {
         response.put("pageSize", pageSize);
         response.put("totalRecords", totalRecords);
         response.put("totalPages", totalRecords == 0 ? 1 : (int) Math.ceil((double) totalRecords / pageSize));
-        response.put("counts", readDashboard(userId, admin).get("counts"));
+        response.put("counts", readDashboard(userId, admin, tenantId).get("counts"));
         return response;
     }
 
@@ -688,7 +702,7 @@ public class ContractService {
     }
 
     @Transactional
-    public Map<String, Object> createContract(Map<String, Object> payload, String userId, boolean admin) {
+    public Map<String, Object> createContract(Map<String, Object> payload, String userId, boolean admin, String tenantId) {
         Long templateId = longValue(payload.get("templateId"));
         if (templateId == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Template is required.");
@@ -696,7 +710,7 @@ public class ContractService {
 
         Map<String, Object> template = readTemplate(templateId, userId, admin);
         Map<String, Object> version = resolveVersionForContract(template, longValue(payload.get("templateVersionId")), admin);
-        Map<String, Object> settings = readCompanySettingsInternal();
+        Map<String, Object> settings = readCompanySettingsInternal(requireTenantId(tenantId));
         List<Map<String, Object>> signers = normalizeSignerPayload(payload.get("signers"));
         if (signers.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "At least one signer is required.");
@@ -799,7 +813,7 @@ public class ContractService {
     }
 
     @Transactional
-    public Map<String, Object> createBatch(Map<String, Object> payload, String userId, boolean admin) {
+    public Map<String, Object> createBatch(Map<String, Object> payload, String userId, boolean admin, String tenantId) {
         Long templateId = longValue(payload.get("templateId"));
         if (templateId == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Template is required.");
@@ -834,7 +848,7 @@ public class ContractService {
                 contractPayload.put("contractMessage", firstNonBlank(row.get("contractMessage"), payload.get("contractMessage")));
                 contractPayload.put("signers", List.of(normalizeSingleSignerRow(row)));
                 contractPayload.put("fieldValues", row.get("fieldValues"));
-                Map<String, Object> created = createContract(contractPayload, userId, admin);
+                Map<String, Object> created = createContract(contractPayload, userId, admin, tenantId);
                 sendContract(longValue(created.get("contractId")), userId, admin);
                 createdRefs.add(stringValue(created.get("contractRef")));
                 successCount++;

@@ -118,8 +118,18 @@ function ChevronIcon() {
     );
 }
 
+function tenantRoleLabel(tenantRoleCd) {
+    if (tenantRoleCd === 'OWNER') {
+        return 'Owner';
+    }
+    if (tenantRoleCd === 'ADMIN') {
+        return 'Admin';
+    }
+    return 'Member';
+}
+
 export default function Topbar() {
-    const { user, logout } = useAuth();
+    const { user, currentTenant, memberships, logout, switchTenant } = useAuth();
     const navigate = useNavigate();
     const clientRef = useRef(null);
     const alarmSubscriptionRef = useRef(null);
@@ -134,10 +144,18 @@ export default function Topbar() {
     const [messagePanel, setMessagePanel] = useState({ rooms: [], unreadRoomCount: 0, unreadMessageCount: 0 });
     const [messageLoading, setMessageLoading] = useState(false);
     const [messageError, setMessageError] = useState('');
+    const [switchingTenant, setSwitchingTenant] = useState(false);
+    const [tenantError, setTenantError] = useState('');
 
     const initials = user?.userNm ? user.userNm.charAt(0) : '?';
     const unreadAlarmCount = useMemo(() => alarms.filter((item) => item.readYn !== 'Y').length, [alarms]);
     const unreadMessageCount = messagePanel?.unreadMessageCount || 0;
+    const currentTenantId = currentTenant?.tenantId || '';
+    const membershipOptions = useMemo(
+        () => (Array.isArray(memberships) ? memberships.filter((membership) => membership.tenantId) : []),
+        [memberships]
+    );
+    const userRoleLine = [currentTenant?.tenantNm || user?.tenantNm, user?.deptNm, user?.jbgdNm].filter(Boolean).join(' / ');
 
     const refreshAlarms = useCallback(async (silent = false) => {
         if (!silent) {
@@ -279,6 +297,7 @@ export default function Topbar() {
     }
 
     function handleOpenUserMenu() {
+        setTenantError('');
         setOpenMenu((current) => (current === 'user' ? '' : 'user'));
     }
 
@@ -326,6 +345,25 @@ export default function Topbar() {
     function handleOpenRoom(roomId) {
         setOpenMenu('');
         navigate(`/messenger?room=${roomId}`);
+    }
+
+    async function handleTenantChange(event) {
+        const tenantId = event.target.value;
+        if (!tenantId || tenantId === currentTenantId || switchingTenant) {
+            return;
+        }
+
+        setSwitchingTenant(true);
+        setTenantError('');
+        try {
+            await switchTenant(tenantId);
+            setOpenMenu('');
+            navigate('/', { replace: true });
+        } catch (error) {
+            setTenantError(error.response?.data?.message || '워크스페이스 전환에 실패했습니다.');
+        } finally {
+            setSwitchingTenant(false);
+        }
     }
 
     return (
@@ -473,12 +511,39 @@ export default function Topbar() {
                         <div className="topbar-user-avatar">{initials}</div>
                         <div className="topbar-user-info">
                             <span className="topbar-user-name">{user?.userNm || 'Guest'}</span>
-                            <span className="topbar-user-role">{[user?.deptNm, user?.jbgdNm].filter(Boolean).join(' / ')}</span>
+                            <span className="topbar-user-role">{userRoleLine || '워크스페이스 없음'}</span>
                         </div>
                         <ChevronIcon />
                     </button>
                     {openMenu === 'user' && (
                         <div className="topbar-dropdown" role="menu" aria-label="계정 메뉴">
+                            <div className="topbar-dropdown-section">
+                                <div className="topbar-dropdown-label">현재 워크스페이스</div>
+                                <strong>{currentTenant?.tenantNm || user?.tenantNm || '선택된 워크스페이스 없음'}</strong>
+                                <div className="topbar-dropdown-help">
+                                    {tenantRoleLabel(currentTenant?.tenantRoleCd)}
+                                    {currentTenant?.tenantSlug ? ` · ${currentTenant.tenantSlug}` : ''}
+                                </div>
+                                {membershipOptions.length > 1 && (
+                                    <>
+                                        <label className="topbar-dropdown-label" htmlFor="topbar-tenant-switch">워크스페이스 전환</label>
+                                        <select
+                                            id="topbar-tenant-switch"
+                                            className="form-input"
+                                            value={currentTenantId}
+                                            onChange={handleTenantChange}
+                                            disabled={switchingTenant}
+                                        >
+                                            {membershipOptions.map((membership) => (
+                                                <option key={membership.tenantId} value={membership.tenantId}>
+                                                    {membership.tenantNm || membership.tenantId}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </>
+                                )}
+                                {tenantError && <div className="topbar-dropdown-help" style={{ color: 'var(--danger)' }}>{tenantError}</div>}
+                            </div>
                             <button type="button" className="topbar-dropdown-item" onClick={handleSettings}>마이페이지</button>
                             <button type="button" className="topbar-dropdown-item danger" onClick={handleLogout}>로그아웃</button>
                         </div>

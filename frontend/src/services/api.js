@@ -1,7 +1,8 @@
-﻿import axios from 'axios';
+import axios from 'axios';
 
 export const STORAGE_KEYS = {
     user: 'starworks.user',
+    session: 'starworks.session',
 };
 
 const api = axios.create({
@@ -14,10 +15,17 @@ const api = axios.create({
 
 function clearStoredAuth() {
     localStorage.removeItem(STORAGE_KEYS.user);
+    localStorage.removeItem(STORAGE_KEYS.session);
+}
+
+function isPublicAuthPath(pathname = '') {
+    return pathname === '/login'
+        || pathname === '/signup'
+        || pathname.startsWith('/invite/accept');
 }
 
 function isApiRequest(url = '') {
-    return ['/common/', '/rest/', '/chat/', '/mail/'].some((prefix) => url.includes(prefix));
+    return ['/common/', '/rest/', '/chat/', '/mail/', '/public/'].some((prefix) => url.includes(prefix));
 }
 
 function isAuthRequest(url = '') {
@@ -78,7 +86,7 @@ api.interceptors.response.use(
     (response) => {
         if (typeof window !== 'undefined' && isLoginRedirectResponse(response)) {
             clearStoredAuth();
-            if (window.location.pathname !== '/login') {
+            if (!isPublicAuthPath(window.location.pathname)) {
                 window.location.assign('/login');
             }
 
@@ -90,7 +98,7 @@ api.interceptors.response.use(
     (error) => {
         if (error.response?.status === 401 && !isAuthRequest(error.config?.url)) {
             clearStoredAuth();
-            if (window.location.pathname !== '/login') {
+            if (!isPublicAuthPath(window.location.pathname)) {
                 window.location.assign('/login');
             }
         }
@@ -100,9 +108,21 @@ api.interceptors.response.use(
 );
 
 export const authAPI = {
-    login: (username, password) => api.post('/common/auth', { username, password }),
+    login: (identifier, password, tenantId = '') => api.post('/common/auth', { identifier, password, tenantId }),
     logout: () => api.post('/common/auth/revoke'),
     session: () => api.get('/rest/mypage'),
+    switchTenant: (tenantId) => api.post('/common/auth/switch-tenant', { tenantId }),
+};
+
+export const publicPlatformAPI = {
+    signupConfig: () => api.get('/public/signup/config'),
+    signup: (payload) => api.post('/public/signup', payload),
+    invitation: (token) => api.get(`/public/invitations/${token}`),
+    acceptInvitation: (payload) => api.post('/public/invitations/accept', payload),
+};
+
+export const platformAPI = {
+    createInvitation: (payload) => api.post('/rest/platform/invitations', payload),
 };
 
 export const usersAPI = {

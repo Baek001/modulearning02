@@ -1,7 +1,7 @@
 package kr.or.ddit.vo;
 
-import java.util.List;
 import java.util.Date;
+import java.util.List;
 
 import org.springframework.web.multipart.MultipartFile;
 
@@ -14,6 +14,7 @@ import lombok.ToString;
 @Data
 public class CommunityVO implements FileAttachable {
     private Long communityId;
+    private String tenantId;
     private String communityNm;
     private String communityDesc;
     private String communityTypeCd;

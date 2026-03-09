@@ -7,6 +7,7 @@ import lombok.Data;
 @Data
 public class CommunityMemberVO {
     private Long communityId;
+    private String tenantId;
     private String userId;
     private String roleCd;
     private String statusCd;

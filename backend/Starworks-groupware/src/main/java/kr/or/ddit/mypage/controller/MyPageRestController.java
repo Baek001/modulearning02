@@ -13,6 +13,8 @@ import kr.or.ddit.mypage.dto.MyPasswordChangeRequest;
 import kr.or.ddit.mypage.dto.MyProfileUpdateRequest;
 import kr.or.ddit.mypage.service.MyPageService;
 import kr.or.ddit.security.CustomUserDetails;
+import kr.or.ddit.tenant.dto.AuthSessionResponse;
+import kr.or.ddit.tenant.service.TenantPlatformService;
 import kr.or.ddit.users.service.UsersService;
 import kr.or.ddit.vo.UsersVO;
 import lombok.RequiredArgsConstructor;
@@ -24,10 +26,11 @@ public class MyPageRestController {
 
     private final MyPageService service;
     private final UsersService usersService;
+    private final TenantPlatformService tenantPlatformService;
 
     @GetMapping
-    public UsersVO getMyInfo(@AuthenticationPrincipal CustomUserDetails user) {
-        return usersService.readUser(user.getUsername());
+    public AuthSessionResponse getMyInfo(@AuthenticationPrincipal CustomUserDetails user) {
+        return tenantPlatformService.buildSession(user.getUsername());
     }
 
     @PutMapping("/profile")

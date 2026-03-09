@@ -25,6 +25,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import kr.or.ddit.messenger.community.service.CommunityService;
 import kr.or.ddit.security.CustomUserDetails;
+import kr.or.ddit.tenant.service.TenantSecurityService;
 import kr.or.ddit.vo.CommunityMemberVO;
 import kr.or.ddit.vo.CommunityVO;
 import lombok.RequiredArgsConstructor;
@@ -35,6 +36,7 @@ import lombok.RequiredArgsConstructor;
 public class CommunityRestController {
 
     private final CommunityService communityService;
+    private final TenantSecurityService tenantSecurityService;
     private final ObjectMapper objectMapper;
 
     @GetMapping
@@ -45,7 +47,7 @@ public class CommunityRestController {
         @RequestParam(required = false) String view,
         @RequestParam(required = false, defaultValue = "false") boolean manageable
     ) {
-        return communityService.getCommunities(userDetails.getUsername(), q, view, manageable, isAdmin(authentication));
+        return communityService.getCommunities(userDetails.getTenantId(), userDetails.getUsername(), q, view, manageable, tenantSecurityService.isTenantAdmin(authentication));
     }
 
     @GetMapping("/search")
@@ -56,7 +58,7 @@ public class CommunityRestController {
         @RequestParam(required = false) String view,
         @RequestParam(required = false, defaultValue = "false") boolean manageable
     ) {
-        return communityService.getCommunities(userDetails.getUsername(), q, view, manageable, isAdmin(authentication));
+        return communityService.getCommunities(userDetails.getTenantId(), userDetails.getUsername(), q, view, manageable, tenantSecurityService.isTenantAdmin(authentication));
     }
 
     @GetMapping("/{communityId}")
@@ -65,7 +67,7 @@ public class CommunityRestController {
         @AuthenticationPrincipal CustomUserDetails userDetails,
         Authentication authentication
     ) {
-        return communityService.getCommunity(communityId, userDetails.getUsername(), isAdmin(authentication));
+        return communityService.getCommunity(userDetails.getTenantId(), communityId, userDetails.getUsername(), tenantSecurityService.isTenantAdmin(authentication));
     }
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
@@ -76,13 +78,14 @@ public class CommunityRestController {
     ) {
         CommunityVO community = toCommunity(body);
         return communityService.createCommunity(
+            userDetails.getTenantId(),
             community,
             userDetails.getUsername(),
             asStringList(body.get("memberUserIds")),
             asStringList(body.get("operatorUserIds")),
             null,
             null,
-            isAdmin(authentication)
+            tenantSecurityService.isTenantAdmin(authentication)
         );
     }
 
@@ -97,13 +100,14 @@ public class CommunityRestController {
         Map<String, Object> body = objectMapper.readValue(payload, new TypeReference<Map<String, Object>>() {});
         CommunityVO community = toCommunity(body);
         return communityService.createCommunity(
+            userDetails.getTenantId(),
             community,
             userDetails.getUsername(),
             asStringList(body.get("memberUserIds")),
             asStringList(body.get("operatorUserIds")),
             iconFile,
             coverFile,
-            isAdmin(authentication)
+            tenantSecurityService.isTenantAdmin(authentication)
         );
     }
 
@@ -116,13 +120,14 @@ public class CommunityRestController {
     ) {
         CommunityVO community = toCommunity(body);
         return communityService.updateCommunity(
+            userDetails.getTenantId(),
             communityId,
             community,
             userDetails.getUsername(),
             asStringList(body.get("operatorUserIds")),
             null,
             null,
-            isAdmin(authentication)
+            tenantSecurityService.isTenantAdmin(authentication)
         );
     }
 
@@ -138,13 +143,14 @@ public class CommunityRestController {
         Map<String, Object> body = objectMapper.readValue(payload, new TypeReference<Map<String, Object>>() {});
         CommunityVO community = toCommunity(body);
         return communityService.updateCommunity(
+            userDetails.getTenantId(),
             communityId,
             community,
             userDetails.getUsername(),
             asStringList(body.get("operatorUserIds")),
             iconFile,
             coverFile,
-            isAdmin(authentication)
+            tenantSecurityService.isTenantAdmin(authentication)
         );
     }
 
@@ -154,7 +160,7 @@ public class CommunityRestController {
         @AuthenticationPrincipal CustomUserDetails userDetails,
         Authentication authentication
     ) {
-        communityService.closeCommunity(communityId, userDetails.getUsername(), isAdmin(authentication));
+        communityService.closeCommunity(userDetails.getTenantId(), communityId, userDetails.getUsername(), tenantSecurityService.isTenantAdmin(authentication));
         return Map.of("success", true);
     }
 
@@ -164,7 +170,7 @@ public class CommunityRestController {
         @AuthenticationPrincipal CustomUserDetails userDetails,
         Authentication authentication
     ) {
-        communityService.closeCommunity(communityId, userDetails.getUsername(), isAdmin(authentication));
+        communityService.closeCommunity(userDetails.getTenantId(), communityId, userDetails.getUsername(), tenantSecurityService.isTenantAdmin(authentication));
         return Map.of("success", true);
     }
 
@@ -174,7 +180,7 @@ public class CommunityRestController {
         @AuthenticationPrincipal CustomUserDetails userDetails,
         Authentication authentication
     ) {
-        return communityService.joinCommunity(communityId, userDetails.getUsername(), isAdmin(authentication));
+        return communityService.joinCommunity(userDetails.getTenantId(), communityId, userDetails.getUsername(), tenantSecurityService.isTenantAdmin(authentication));
     }
 
     @PostMapping("/{communityId}/leave")
@@ -183,7 +189,7 @@ public class CommunityRestController {
         @AuthenticationPrincipal CustomUserDetails userDetails,
         Authentication authentication
     ) {
-        communityService.leaveCommunity(communityId, userDetails.getUsername(), isAdmin(authentication));
+        communityService.leaveCommunity(userDetails.getTenantId(), communityId, userDetails.getUsername(), tenantSecurityService.isTenantAdmin(authentication));
         return Map.of("success", true);
     }
 
@@ -194,7 +200,7 @@ public class CommunityRestController {
         Authentication authentication,
         @RequestParam(required = false) String status
     ) {
-        return communityService.getMembers(communityId, userDetails.getUsername(), isAdmin(authentication), status);
+        return communityService.getMembers(userDetails.getTenantId(), communityId, userDetails.getUsername(), tenantSecurityService.isTenantAdmin(authentication), status);
     }
 
     @GetMapping("/{communityId}/requests")
@@ -203,7 +209,7 @@ public class CommunityRestController {
         @AuthenticationPrincipal CustomUserDetails userDetails,
         Authentication authentication
     ) {
-        return communityService.getPendingMembers(communityId, userDetails.getUsername(), isAdmin(authentication));
+        return communityService.getPendingMembers(userDetails.getTenantId(), communityId, userDetails.getUsername(), tenantSecurityService.isTenantAdmin(authentication));
     }
 
     @PostMapping("/{communityId}/members")
@@ -213,7 +219,7 @@ public class CommunityRestController {
         @AuthenticationPrincipal CustomUserDetails userDetails,
         Authentication authentication
     ) {
-        communityService.addMembers(communityId, asStringList(body.get("userIds")), userDetails.getUsername(), isAdmin(authentication));
+        communityService.addMembers(userDetails.getTenantId(), communityId, asStringList(body.get("userIds")), userDetails.getUsername(), tenantSecurityService.isTenantAdmin(authentication));
         return Map.of("success", true);
     }
 
@@ -224,7 +230,7 @@ public class CommunityRestController {
         @AuthenticationPrincipal CustomUserDetails userDetails,
         Authentication authentication
     ) {
-        communityService.removeMember(communityId, userId, userDetails.getUsername(), isAdmin(authentication));
+        communityService.removeMember(userDetails.getTenantId(), communityId, userId, userDetails.getUsername(), tenantSecurityService.isTenantAdmin(authentication));
         return Map.of("success", true);
     }
 
@@ -236,7 +242,7 @@ public class CommunityRestController {
         @AuthenticationPrincipal CustomUserDetails userDetails,
         Authentication authentication
     ) {
-        communityService.updateMemberRole(communityId, userId, body.get("roleCd") == null ? null : String.valueOf(body.get("roleCd")), userDetails.getUsername(), isAdmin(authentication));
+        communityService.updateMemberRole(userDetails.getTenantId(), communityId, userId, body.get("roleCd") == null ? null : String.valueOf(body.get("roleCd")), userDetails.getUsername(), tenantSecurityService.isTenantAdmin(authentication));
         return Map.of("success", true);
     }
 
@@ -247,7 +253,7 @@ public class CommunityRestController {
         @AuthenticationPrincipal CustomUserDetails userDetails,
         Authentication authentication
     ) {
-        communityService.approveMember(communityId, userId, userDetails.getUsername(), isAdmin(authentication));
+        communityService.approveMember(userDetails.getTenantId(), communityId, userId, userDetails.getUsername(), tenantSecurityService.isTenantAdmin(authentication));
         return Map.of("success", true);
     }
 
@@ -258,7 +264,7 @@ public class CommunityRestController {
         @AuthenticationPrincipal CustomUserDetails userDetails,
         Authentication authentication
     ) {
-        communityService.rejectMember(communityId, userId, userDetails.getUsername(), isAdmin(authentication));
+        communityService.rejectMember(userDetails.getTenantId(), communityId, userId, userDetails.getUsername(), tenantSecurityService.isTenantAdmin(authentication));
         return Map.of("success", true);
     }
 
@@ -269,7 +275,7 @@ public class CommunityRestController {
         @AuthenticationPrincipal CustomUserDetails userDetails
     ) {
         boolean favorite = body.get("favoriteYn") == null || "Y".equalsIgnoreCase(String.valueOf(body.get("favoriteYn"))) || Boolean.TRUE.equals(body.get("favoriteYn"));
-        communityService.toggleFavorite(communityId, userDetails.getUsername(), favorite);
+        communityService.toggleFavorite(userDetails.getTenantId(), communityId, userDetails.getUsername(), favorite);
         return Map.of("success", true);
     }
 
@@ -278,7 +284,7 @@ public class CommunityRestController {
         @RequestBody Map<String, Object> body,
         @AuthenticationPrincipal CustomUserDetails userDetails
     ) {
-        communityService.saveOrder(userDetails.getUsername(), asLongList(body.get("communityIds")));
+        communityService.saveOrder(userDetails.getTenantId(), userDetails.getUsername(), asLongList(body.get("communityIds")));
         return Map.of("success", true);
     }
 
@@ -287,7 +293,7 @@ public class CommunityRestController {
         @AuthenticationPrincipal CustomUserDetails userDetails,
         Authentication authentication
     ) {
-        return communityService.syncOrgCommunities(userDetails.getUsername(), isAdmin(authentication));
+        return communityService.syncOrgCommunities(userDetails.getTenantId(), userDetails.getUsername(), tenantSecurityService.isTenantAdmin(authentication));
     }
 
     private CommunityVO toCommunity(Map<String, Object> body) {
@@ -323,15 +329,5 @@ public class CommunityRestController {
             .map(String::valueOf)
             .map(Long::valueOf)
             .toList();
-    }
-
-    private boolean isAdmin(Authentication authentication) {
-        return authentication != null
-            && authentication.getAuthorities() != null
-            && authentication.getAuthorities().stream()
-                .anyMatch(authority ->
-                    "ROLE_ADMIN".equalsIgnoreCase(authority.getAuthority())
-                    || "ADMIN".equalsIgnoreCase(authority.getAuthority())
-                );
     }
 }

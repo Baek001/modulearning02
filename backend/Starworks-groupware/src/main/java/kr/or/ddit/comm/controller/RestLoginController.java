@@ -10,10 +10,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationServiceException;
 import org.springframework.security.authentication.BadCredentialsException;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.context.SecurityContext;
@@ -27,7 +25,11 @@ import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import kr.or.ddit.security.CustomUserDetails;
 import kr.or.ddit.security.jwt.JwtProvider;
+import kr.or.ddit.tenant.dto.TenantSwitchRequest;
+import kr.or.ddit.tenant.service.PlatformAuthenticationService;
+import kr.or.ddit.tenant.service.TenantPlatformService;
 import kr.or.ddit.vo.RestLoginVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -37,7 +39,8 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class RestLoginController {
     private final JwtProvider provider;
-    private final AuthenticationManager authenticationManager;
+    private final PlatformAuthenticationService platformAuthenticationService;
+    private final TenantPlatformService tenantPlatformService;
     private final SecurityContextRepository contextRepository;
 
     @Value("${app.cookie.domain:}")
@@ -58,45 +61,45 @@ public class RestLoginController {
         HttpServletRequest request,
         HttpServletResponse response
     ) {
-        String username = sanitizeUsername(restLoginVO.getUsername());
-        Authentication inputToken = UsernamePasswordAuthenticationToken
-            .unauthenticated(restLoginVO.getUsername(), restLoginVO.getPassword());
-
+        String identifier = sanitizeIdentifier(restLoginVO);
         try {
-            Authentication authentication = authenticationManager.authenticate(inputToken);
-
-            SecurityContext securityContext = SecurityContextHolder.createEmptyContext();
-            securityContext.setAuthentication(authentication);
-            SecurityContextHolder.setContext(securityContext);
-            contextRepository.saveContext(securityContext, request, response);
-
-            String jwt = provider.generateJwt(authentication);
-            ResponseCookie jwtCookie = buildAccessTokenCookie(jwt, cookieMaxAge);
-
-            return ResponseEntity.ok()
-                .header(HttpHeaders.SET_COOKIE, jwtCookie.toString())
-                .body(authentication);
+            Authentication authentication = platformAuthenticationService.authenticate(restLoginVO);
+            return applyAuthentication(authentication, request, response);
         } catch (BadCredentialsException e) {
-            log.warn("Invalid login credentials for username={}", username);
+            log.warn("Invalid login credentials for identifier={}", identifier);
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorBody(
                 "INVALID_CREDENTIALS",
-                "아이디 또는 비밀번호가 올바르지 않습니다."
+                "Login failed. Check your email or password."
             ));
         } catch (AuthenticationException e) {
             if (isAuthenticationServiceFailure(e)) {
-                log.error("Login service failure for username={}", username, e);
+                log.error("Login service failure for identifier={}", identifier, e);
                 return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(errorBody(
                     "AUTH_SERVICE_UNAVAILABLE",
-                    "로그인 서비스를 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해 주세요."
+                    "Login is temporarily unavailable."
                 ));
             }
 
-            log.warn("Login failed for username={} with type={}", username, e.getClass().getSimpleName());
+            log.warn("Login failed for identifier={} with type={}", identifier, e.getClass().getSimpleName());
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorBody(
                 "LOGIN_FAILED",
-                "인증에 실패했습니다. 관리자에게 문의하세요."
+                "Login failed."
             ));
         }
+    }
+
+    @PostMapping("/common/auth/switch-tenant")
+    public ResponseEntity<?> switchTenant(
+        @RequestBody TenantSwitchRequest requestBody,
+        Authentication authentication,
+        HttpServletRequest request,
+        HttpServletResponse response
+    ) {
+        if (!(authentication.getPrincipal() instanceof CustomUserDetails userDetails)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorBody("UNAUTHORIZED", "Authentication is required."));
+        }
+        Authentication switched = platformAuthenticationService.switchTenant(userDetails, requestBody.getTenantId());
+        return applyAuthentication(switched, request, response);
     }
 
     @RequestMapping("/common/auth/revoke")
@@ -111,6 +114,25 @@ public class RestLoginController {
         return ResponseEntity.noContent()
             .header(HttpHeaders.SET_COOKIE, buildAccessTokenCookie("", 0).toString())
             .build();
+    }
+
+    private ResponseEntity<?> applyAuthentication(
+        Authentication authentication,
+        HttpServletRequest request,
+        HttpServletResponse response
+    ) {
+        SecurityContext securityContext = SecurityContextHolder.createEmptyContext();
+        securityContext.setAuthentication(authentication);
+        SecurityContextHolder.setContext(securityContext);
+        contextRepository.saveContext(securityContext, request, response);
+
+        String jwt = provider.generateJwt(authentication);
+        ResponseCookie jwtCookie = buildAccessTokenCookie(jwt, cookieMaxAge);
+        String userId = authentication.getName();
+
+        return ResponseEntity.ok()
+            .header(HttpHeaders.SET_COOKIE, jwtCookie.toString())
+            .body(tenantPlatformService.buildSession(userId));
     }
 
     private Map<String, String> errorBody(String errorCode, String message) {
@@ -149,10 +171,19 @@ public class RestLoginController {
         return false;
     }
 
-    private String sanitizeUsername(String username) {
-        if (!StringUtils.hasText(username)) {
+    private String sanitizeIdentifier(RestLoginVO loginVO) {
+        if (loginVO == null) {
             return "<blank>";
         }
-        return username.trim();
+        if (StringUtils.hasText(loginVO.getIdentifier())) {
+            return loginVO.getIdentifier().trim();
+        }
+        if (StringUtils.hasText(loginVO.getEmail())) {
+            return loginVO.getEmail().trim();
+        }
+        if (StringUtils.hasText(loginVO.getUsername())) {
+            return loginVO.getUsername().trim();
+        }
+        return "<blank>";
     }
 }

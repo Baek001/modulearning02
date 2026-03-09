@@ -10,37 +10,37 @@ import kr.or.ddit.vo.CommunityVO;
 
 public interface CommunityService {
 
-    List<CommunityVO> getCommunities(String currentUserId, String keyword, String view, boolean manageableOnly, boolean admin);
+    List<CommunityVO> getCommunities(String tenantId, String currentUserId, String keyword, String view, boolean manageableOnly, boolean admin);
 
-    CommunityVO getCommunity(Long communityId, String currentUserId, boolean admin);
+    CommunityVO getCommunity(String tenantId, Long communityId, String currentUserId, boolean admin);
 
-    CommunityVO createCommunity(CommunityVO community, String currentUserId, List<String> memberUserIds, List<String> operatorUserIds, MultipartFile iconFile, MultipartFile coverFile, boolean admin);
+    CommunityVO createCommunity(String tenantId, CommunityVO community, String currentUserId, List<String> memberUserIds, List<String> operatorUserIds, MultipartFile iconFile, MultipartFile coverFile, boolean admin);
 
-    CommunityVO updateCommunity(Long communityId, CommunityVO community, String currentUserId, List<String> operatorUserIds, MultipartFile iconFile, MultipartFile coverFile, boolean admin);
+    CommunityVO updateCommunity(String tenantId, Long communityId, CommunityVO community, String currentUserId, List<String> operatorUserIds, MultipartFile iconFile, MultipartFile coverFile, boolean admin);
 
-    void closeCommunity(Long communityId, String currentUserId, boolean admin);
+    void closeCommunity(String tenantId, Long communityId, String currentUserId, boolean admin);
 
-    List<CommunityMemberVO> getMembers(Long communityId, String currentUserId, boolean admin, String statusCd);
+    List<CommunityMemberVO> getMembers(String tenantId, Long communityId, String currentUserId, boolean admin, String statusCd);
 
-    void addMembers(Long communityId, List<String> userIds, String currentUserId, boolean admin);
+    void addMembers(String tenantId, Long communityId, List<String> userIds, String currentUserId, boolean admin);
 
-    void removeMember(Long communityId, String userId, String currentUserId, boolean admin);
+    void removeMember(String tenantId, Long communityId, String userId, String currentUserId, boolean admin);
 
-    CommunityVO joinCommunity(Long communityId, String currentUserId, boolean admin);
+    CommunityVO joinCommunity(String tenantId, Long communityId, String currentUserId, boolean admin);
 
-    void leaveCommunity(Long communityId, String currentUserId, boolean admin);
+    void leaveCommunity(String tenantId, Long communityId, String currentUserId, boolean admin);
 
-    void updateMemberRole(Long communityId, String targetUserId, String roleCd, String currentUserId, boolean admin);
+    void updateMemberRole(String tenantId, Long communityId, String targetUserId, String roleCd, String currentUserId, boolean admin);
 
-    List<CommunityMemberVO> getPendingMembers(Long communityId, String currentUserId, boolean admin);
+    List<CommunityMemberVO> getPendingMembers(String tenantId, Long communityId, String currentUserId, boolean admin);
 
-    void approveMember(Long communityId, String targetUserId, String currentUserId, boolean admin);
+    void approveMember(String tenantId, Long communityId, String targetUserId, String currentUserId, boolean admin);
 
-    void rejectMember(Long communityId, String targetUserId, String currentUserId, boolean admin);
+    void rejectMember(String tenantId, Long communityId, String targetUserId, String currentUserId, boolean admin);
 
-    void toggleFavorite(Long communityId, String currentUserId, boolean favorite);
+    void toggleFavorite(String tenantId, Long communityId, String currentUserId, boolean favorite);
 
-    void saveOrder(String currentUserId, List<Long> communityIds);
+    void saveOrder(String tenantId, String currentUserId, List<Long> communityIds);
 
-    Map<String, Object> syncOrgCommunities(String currentUserId, boolean admin);
+    Map<String, Object> syncOrgCommunities(String tenantId, String currentUserId, boolean admin);
 }

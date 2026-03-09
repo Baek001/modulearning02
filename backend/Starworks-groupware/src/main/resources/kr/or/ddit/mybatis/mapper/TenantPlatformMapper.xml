@@ -1,0 +1,319 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="kr.or.ddit.mybatis.mapper.TenantPlatformMapper">
+
+    <insert id="insertTenant">
+        INSERT INTO TENANT (
+            TENANT_ID,
+            TENANT_NM,
+            TENANT_SLUG,
+            STATUS_CD,
+            OWNER_USER_ID,
+            CRT_DT,
+            LAST_CHG_DT
+        ) VALUES (
+            #{tenantId},
+            #{tenantNm},
+            #{tenantSlug},
+            COALESCE(#{statusCd}, 'ACTIVE'),
+            #{ownerUserId},
+            CURRENT_TIMESTAMP,
+            CURRENT_TIMESTAMP
+        )
+    </insert>
+
+    <select id="selectTenantById" resultType="kr.or.ddit.tenant.vo.TenantVO">
+        SELECT
+            TENANT_ID,
+            TENANT_NM,
+            TENANT_SLUG,
+            STATUS_CD,
+            OWNER_USER_ID,
+            CRT_DT,
+            LAST_CHG_DT
+        FROM TENANT
+        WHERE TENANT_ID = #{tenantId}
+    </select>
+
+    <select id="selectTenantBySlug" resultType="kr.or.ddit.tenant.vo.TenantVO">
+        SELECT
+            TENANT_ID,
+            TENANT_NM,
+            TENANT_SLUG,
+            STATUS_CD,
+            OWNER_USER_ID,
+            CRT_DT,
+            LAST_CHG_DT
+        FROM TENANT
+        WHERE TENANT_SLUG = #{tenantSlug}
+    </select>
+
+    <update id="updateTenantOwnerUserId">
+        UPDATE TENANT
+        SET OWNER_USER_ID = #{ownerUserId},
+            LAST_CHG_DT = CURRENT_TIMESTAMP
+        WHERE TENANT_ID = #{tenantId}
+    </update>
+
+    <insert id="insertTenantMember">
+        INSERT INTO TENANT_MEMBER (
+            TENANT_ID,
+            USER_ID,
+            TENANT_ROLE_CD,
+            MEMBERSHIP_STATUS_CD,
+            CRT_DT,
+            LAST_CHG_DT
+        ) VALUES (
+            #{tenantId},
+            #{userId},
+            COALESCE(#{tenantRoleCd}, 'MEMBER'),
+            COALESCE(#{membershipStatusCd}, 'ACTIVE'),
+            CURRENT_TIMESTAMP,
+            CURRENT_TIMESTAMP
+        )
+        ON CONFLICT (TENANT_ID, USER_ID)
+        DO UPDATE SET
+            TENANT_ROLE_CD = COALESCE(EXCLUDED.TENANT_ROLE_CD, TENANT_MEMBER.TENANT_ROLE_CD),
+            MEMBERSHIP_STATUS_CD = COALESCE(EXCLUDED.MEMBERSHIP_STATUS_CD, TENANT_MEMBER.MEMBERSHIP_STATUS_CD),
+            LAST_CHG_DT = CURRENT_TIMESTAMP
+    </insert>
+
+    <update id="updateTenantMemberStatus">
+        UPDATE TENANT_MEMBER
+        SET MEMBERSHIP_STATUS_CD = #{membershipStatusCd},
+            LAST_CHG_DT = CURRENT_TIMESTAMP
+        WHERE TENANT_ID = #{tenantId}
+          AND USER_ID = #{userId}
+    </update>
+
+    <sql id="membershipColumns">
+        t.TENANT_ID,
+        t.TENANT_NM,
+        t.TENANT_SLUG,
+        u.USER_ID,
+        COALESCE(u.LOGIN_ID, u.USER_ID) AS LOGIN_ID,
+        u.USER_NM,
+        u.USER_EMAIL,
+        u.DEPT_ID,
+        d.DEPT_NM,
+        tm.TENANT_ROLE_CD,
+        tm.MEMBERSHIP_STATUS_CD,
+        tm.CRT_DT,
+        tm.LAST_CHG_DT
+    </sql>
+
+    <select id="selectLoginCandidates" resultType="kr.or.ddit.tenant.vo.TenantMembershipVO">
+        SELECT
+            <include refid="membershipColumns"/>
+        FROM USERS u
+        JOIN TENANT_MEMBER tm
+          ON tm.TENANT_ID = u.TENANT_ID
+         AND tm.USER_ID = u.USER_ID
+        JOIN TENANT t
+          ON t.TENANT_ID = u.TENANT_ID
+        LEFT JOIN DEPARTMENT d
+          ON d.DEPT_ID = u.DEPT_ID
+        WHERE COALESCE(u.RSGNTN_YN, 'N') = 'N'
+          AND UPPER(COALESCE(tm.MEMBERSHIP_STATUS_CD, 'ACTIVE')) = 'ACTIVE'
+          AND UPPER(COALESCE(t.STATUS_CD, 'ACTIVE')) = 'ACTIVE'
+          AND (
+                UPPER(COALESCE(u.LOGIN_ID, u.USER_ID)) = UPPER(#{identifier})
+                OR UPPER(u.USER_EMAIL) = UPPER(#{identifier})
+                OR UPPER(u.USER_ID) = UPPER(#{identifier})
+              )
+          <if test="tenantId != null and tenantId != ''">
+              AND u.TENANT_ID = #{tenantId}
+          </if>
+        ORDER BY
+            CASE UPPER(COALESCE(tm.TENANT_ROLE_CD, 'MEMBER'))
+                WHEN 'OWNER' THEN 0
+                WHEN 'ADMIN' THEN 1
+                ELSE 2
+            END,
+            t.TENANT_ID,
+            u.USER_ID
+    </select>
+
+    <select id="selectMembershipsByUserId" resultType="kr.or.ddit.tenant.vo.TenantMembershipVO">
+        SELECT
+            <include refid="membershipColumns"/>
+        FROM USERS u
+        JOIN TENANT_MEMBER tm
+          ON tm.TENANT_ID = u.TENANT_ID
+         AND tm.USER_ID = u.USER_ID
+        JOIN TENANT t
+          ON t.TENANT_ID = u.TENANT_ID
+        LEFT JOIN DEPARTMENT d
+          ON d.DEPT_ID = u.DEPT_ID
+        WHERE (
+                u.USER_ID = #{userId}
+                OR (
+                    u.USER_EMAIL = (SELECT USER_EMAIL FROM USERS WHERE USER_ID = #{userId})
+                    AND COALESCE(u.USER_EMAIL, '') <> ''
+                )
+              )
+          AND COALESCE(u.RSGNTN_YN, 'N') = 'N'
+          AND UPPER(COALESCE(tm.MEMBERSHIP_STATUS_CD, 'ACTIVE')) = 'ACTIVE'
+        ORDER BY
+            CASE UPPER(COALESCE(tm.TENANT_ROLE_CD, 'MEMBER'))
+                WHEN 'OWNER' THEN 0
+                WHEN 'ADMIN' THEN 1
+                ELSE 2
+            END,
+            t.TENANT_NM,
+            u.USER_ID
+    </select>
+
+    <select id="selectMembershipsByUserEmail" resultType="kr.or.ddit.tenant.vo.TenantMembershipVO">
+        SELECT
+            <include refid="membershipColumns"/>
+        FROM USERS u
+        JOIN TENANT_MEMBER tm
+          ON tm.TENANT_ID = u.TENANT_ID
+         AND tm.USER_ID = u.USER_ID
+        JOIN TENANT t
+          ON t.TENANT_ID = u.TENANT_ID
+        LEFT JOIN DEPARTMENT d
+          ON d.DEPT_ID = u.DEPT_ID
+        WHERE UPPER(u.USER_EMAIL) = UPPER(#{userEmail})
+          AND COALESCE(u.RSGNTN_YN, 'N') = 'N'
+          AND UPPER(COALESCE(tm.MEMBERSHIP_STATUS_CD, 'ACTIVE')) = 'ACTIVE'
+        ORDER BY
+            CASE UPPER(COALESCE(tm.TENANT_ROLE_CD, 'MEMBER'))
+                WHEN 'OWNER' THEN 0
+                WHEN 'ADMIN' THEN 1
+                ELSE 2
+            END,
+            t.TENANT_NM,
+            u.USER_ID
+    </select>
+
+    <select id="selectMembershipByUserEmailAndTenant" resultType="kr.or.ddit.tenant.vo.TenantMembershipVO">
+        SELECT
+            <include refid="membershipColumns"/>
+        FROM USERS u
+        JOIN TENANT_MEMBER tm
+          ON tm.TENANT_ID = u.TENANT_ID
+         AND tm.USER_ID = u.USER_ID
+        JOIN TENANT t
+          ON t.TENANT_ID = u.TENANT_ID
+        LEFT JOIN DEPARTMENT d
+          ON d.DEPT_ID = u.DEPT_ID
+        WHERE UPPER(u.USER_EMAIL) = UPPER(#{userEmail})
+          AND u.TENANT_ID = #{tenantId}
+          AND COALESCE(u.RSGNTN_YN, 'N') = 'N'
+          AND UPPER(COALESCE(tm.MEMBERSHIP_STATUS_CD, 'ACTIVE')) = 'ACTIVE'
+        LIMIT 1
+    </select>
+
+    <select id="selectMembershipByUserIdAndTenant" resultType="kr.or.ddit.tenant.vo.TenantMembershipVO">
+        SELECT
+            <include refid="membershipColumns"/>
+        FROM USERS u
+        JOIN TENANT_MEMBER tm
+          ON tm.TENANT_ID = u.TENANT_ID
+         AND tm.USER_ID = u.USER_ID
+        JOIN TENANT t
+          ON t.TENANT_ID = u.TENANT_ID
+        LEFT JOIN DEPARTMENT d
+          ON d.DEPT_ID = u.DEPT_ID
+        WHERE u.USER_ID = #{userId}
+          AND u.TENANT_ID = #{tenantId}
+        LIMIT 1
+    </select>
+
+    <insert id="insertInvitation">
+        INSERT INTO TENANT_INVITATION (
+            INVITATION_ID,
+            TENANT_ID,
+            INVITE_EMAIL,
+            INVITE_NAME,
+            TENANT_ROLE_CD,
+            STATUS_CD,
+            INVITATION_TOKEN,
+            CREATED_BY_USER_ID,
+            EXPIRES_AT,
+            CRT_DT,
+            LAST_CHG_DT
+        ) VALUES (
+            #{invitationId},
+            #{tenantId},
+            #{inviteEmail},
+            #{inviteName},
+            COALESCE(#{tenantRoleCd}, 'MEMBER'),
+            COALESCE(#{statusCd}, 'PENDING'),
+            #{invitationToken},
+            #{createdByUserId},
+            #{expiresAt},
+            CURRENT_TIMESTAMP,
+            CURRENT_TIMESTAMP
+        )
+    </insert>
+
+    <select id="selectInvitationByToken" resultType="kr.or.ddit.tenant.vo.TenantInvitationVO">
+        SELECT
+            i.INVITATION_ID,
+            i.TENANT_ID,
+            t.TENANT_NM,
+            t.TENANT_SLUG,
+            i.INVITE_EMAIL,
+            i.INVITE_NAME,
+            i.TENANT_ROLE_CD,
+            i.STATUS_CD,
+            i.INVITATION_TOKEN,
+            i.CREATED_BY_USER_ID,
+            i.ACCEPTED_USER_ID,
+            i.EXPIRES_AT,
+            i.ACCEPTED_AT,
+            i.CRT_DT,
+            i.LAST_CHG_DT
+        FROM TENANT_INVITATION i
+        JOIN TENANT t
+          ON t.TENANT_ID = i.TENANT_ID
+        WHERE i.INVITATION_TOKEN = #{invitationToken}
+    </select>
+
+    <update id="acceptInvitation">
+        UPDATE TENANT_INVITATION
+        SET STATUS_CD = 'ACCEPTED',
+            ACCEPTED_USER_ID = #{acceptedUserId},
+            ACCEPTED_AT = CURRENT_TIMESTAMP,
+            LAST_CHG_DT = CURRENT_TIMESTAMP
+        WHERE INVITATION_ID = #{invitationId}
+    </update>
+
+    <insert id="insertTenantCompanySetting">
+        INSERT INTO CONTRACT_COMPANY_SETTING (
+            TENANT_ID,
+            COMPANY_NM,
+            SENDER_NM,
+            SENDER_EMAIL,
+            SENDER_TELNO,
+            PROVIDER_NM,
+            CRT_USER_ID,
+            LAST_CHG_USER_ID,
+            GUIDE_ACK_YN,
+            ADMIN_READY_YN,
+            CRT_DT,
+            LAST_CHG_DT
+        )
+        SELECT
+            #{tenantId},
+            #{companyNm},
+            'Administrator',
+            #{senderEmail},
+            '010-0000-0000',
+            'internal',
+            #{userId},
+            #{userId},
+            'N',
+            'N',
+            CURRENT_TIMESTAMP,
+            CURRENT_TIMESTAMP
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM CONTRACT_COMPANY_SETTING
+            WHERE TENANT_ID = #{tenantId}
+        )
+    </insert>
+</mapper>

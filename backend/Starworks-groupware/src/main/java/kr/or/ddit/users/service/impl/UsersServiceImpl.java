@@ -5,171 +5,241 @@ import java.util.Objects;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import kr.or.ddit.comm.exception.EntityNotFoundException;
 import kr.or.ddit.messenger.community.service.CommunityService;
+import kr.or.ddit.mybatis.mapper.TenantPlatformMapper;
 import kr.or.ddit.mybatis.mapper.UserHistoryMapper;
 import kr.or.ddit.mybatis.mapper.UsersMapper;
+import kr.or.ddit.tenant.vo.TenantMembershipVO;
 import kr.or.ddit.users.service.UsersService;
 import kr.or.ddit.vo.UserHistoryVO;
 import kr.or.ddit.vo.UsersVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-/**
- *
- * @author 윤서현
- * @since 2025. 9. 25.
- * @see
- *
- * <pre>
- * << 개정이력(Modification Information) >>
- *
- *   수정일      			수정자           수정내용
- *  -----------   	-------------    ---------------------------
- *  2025. 9. 25.     	윤서현	          최초 생성
- *  2025.10. 15.     	장어진	          Working Status 테이블 기능을 Users 테이블로 옮김.
-
- * </pre>
- */
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class UsersServiceImpl implements UsersService{
+public class UsersServiceImpl implements UsersService {
 
-	private final UsersMapper mapper;
-	private final UserHistoryMapper historyMapper;
-	private final PasswordEncoder passwordEncoder;
-	private final CommunityService communityService;
+    private final UsersMapper mapper;
+    private final UserHistoryMapper historyMapper;
+    private final TenantPlatformMapper tenantPlatformMapper;
+    private final PasswordEncoder passwordEncoder;
+    private final CommunityService communityService;
 
-	@Override
-	public boolean createUser(UsersVO user) {
+    @Override
+    public boolean createUser(UsersVO user) {
+        encodePassword(user);
+        ensureLoginId(user);
+        boolean created = mapper.insertUser(user) > 0;
+        if (created) {
+            upsertTenantMembership(user);
+            syncTenantCommunities(user.getTenantId());
+        }
+        return created;
+    }
 
-		if(user.getUserPswd() != null && !user.getUserPswd().isBlank()) {
-			String encodePw = passwordEncoder.encode(user.getUserPswd());
-			user.setUserPswd(encodePw);
-		}
+    @Override
+    public List<UsersVO> readUserList() {
+        return mapper.selectUserList();
+    }
 
-		boolean created = mapper.insertUser(user) > 0;
-		if (created) {
-			communityService.syncOrgCommunities("system", true);
-		}
-		return created;
-	}
+    @Override
+    public List<UsersVO> readUserListByTenant(String tenantId) {
+        return mapper.selectUserListByTenant(tenantId);
+    }
 
-	@Override
-	public List<UsersVO> readUserList() {
-		return mapper.selectUserList();
-	}
+    @Override
+    public UsersVO readUser(String userId) {
+        UsersVO user = mapper.selectUser(userId);
+        if (user == null) {
+            throw new EntityNotFoundException(user);
+        }
+        return user;
+    }
 
-	@Override
-	public UsersVO readUser(String userId) {
-		UsersVO user = mapper.selectUser(userId);
-		if(user == null) {
-			throw new EntityNotFoundException(user);
-		}
-		return user;
-	}
+    @Override
+    public UsersVO readUserByTenant(String tenantId, String userId) {
+        UsersVO user = mapper.selectUserByTenant(tenantId, userId);
+        if (user == null) {
+            throw new EntityNotFoundException(userId);
+        }
+        return user;
+    }
 
-	@Override
-	public boolean modifyUser(UsersVO user) {
-		//return mapper.updateUser(user) > 0 ;
+    @Override
+    public boolean modifyUser(UsersVO user) {
+        UsersVO before = mapper.selectUserById(user.getUserId());
+        if (before == null) {
+            throw new EntityNotFoundException(user);
+        }
+        if (!StringUtils.hasText(user.getUserPswd())) {
+            throw new IllegalArgumentException("Password is required.");
+        }
 
-		//기존 사용자 정보 가져오기
-		UsersVO before = mapper.selectUserById(user.getUserId());
-		if(before == null) {
-			throw new EntityNotFoundException(user);
-		}
+        user.setUserPswd(passwordEncoder.encode(user.getUserPswd()));
+        ensureLoginId(user);
+        boolean result = mapper.updateUser(user) > 0;
+        writeUserHistory(before, user, result);
+        if (result) {
+            syncTenantCommunities(user.getTenantId());
+        }
+        return result;
+    }
 
-		// 비밀번호는 반드시 입력해야 함 → 입력된 비밀번호는 무조건 암호화
-	    if (user.getUserPswd() == null || user.getUserPswd().isBlank()) {
-	        throw new IllegalArgumentException("비밀번호는 반드시 입력해야 합니다.");
-	    }
+    @Override
+    public boolean modifyUserByTenant(UsersVO user) {
+        UsersVO before = mapper.selectUserByTenant(user.getTenantId(), user.getUserId());
+        if (before == null) {
+            throw new EntityNotFoundException(user);
+        }
+        if (!StringUtils.hasText(user.getUserPswd())) {
+            throw new IllegalArgumentException("Password is required.");
+        }
 
-	    // bcrypt 암호화 후 저장
-	    user.setUserPswd(passwordEncoder.encode(user.getUserPswd()));
+        user.setUserPswd(passwordEncoder.encode(user.getUserPswd()));
+        ensureLoginId(user);
+        boolean result = mapper.updateUserByTenant(user) > 0;
+        writeUserHistory(before, user, result);
+        if (result) {
+            syncTenantCommunities(user.getTenantId());
+        }
+        return result;
+    }
 
-		//사용자 정보 업데이트
-		boolean result = mapper.updateUser(user) > 0;
+    @Override
+    public boolean retireUser(String userId) {
+        UsersVO current = readUser(userId);
+        boolean retired = mapper.retireUser(userId) > 0;
+        if (retired && StringUtils.hasText(current.getTenantId())) {
+            tenantPlatformMapper.updateTenantMemberStatus(current.getTenantId(), userId, "RETIRED");
+            syncTenantCommunities(current.getTenantId());
+        }
+        return retired;
+    }
 
-		//부서/직급 변경 감지
-		boolean deptChanged = !Objects.equals(before.getDeptId(), user.getDeptId());
-		boolean jbgdChanged = !Objects.equals(before.getJbgdCd(), user.getJbgdCd());
+    @Override
+    public boolean retireUserByTenant(String tenantId, String userId) {
+        boolean retired = mapper.retireUserByTenant(tenantId, userId) > 0;
+        if (retired) {
+            tenantPlatformMapper.updateTenantMemberStatus(tenantId, userId, "RETIRED");
+            syncTenantCommunities(tenantId);
+        }
+        return retired;
+    }
 
-		//부서/직급 변경시 인사이력 insert
-		if(deptChanged || jbgdChanged) {
-			UserHistoryVO hist = new UserHistoryVO();
-			hist.setUserId(user.getUserId());
-			hist.setBeforeDeptId(before.getDeptId());
-			hist.setAfterDeptId(user.getDeptId());
-			hist.setBeforeJbgdCd(before.getJbgdCd());
-			hist.setAfterJbgdCd(user.getJbgdCd());
-			hist.setReason("관리자에 의한 인사정보 변경");
+    @Override
+    public List<UsersVO> searchUsers(String term) {
+        return mapper.selectUsersByTerm(term);
+    }
 
-			//변경유형 코드
-			if (deptChanged && jbgdChanged) {
-			    hist.setChangeType("03"); // 부서+직급
-			} else if (deptChanged) {
-			    hist.setChangeType("01"); // 부서이동
-			} else if (jbgdChanged) {
-			    hist.setChangeType("02"); // 승진/강등
-			}
+    @Override
+    public List<UsersVO> searchUsersInTenant(String tenantId, String term) {
+        return mapper.selectUsersByTermInTenant(tenantId, term);
+    }
 
-			historyMapper.insertUserHistory(hist);
-		}
+    @Override
+    public List<UsersVO> readResignedUserList() {
+        return mapper.selectResignedUserList();
+    }
 
+    @Override
+    public List<UsersVO> readResignedUserListByTenant(String tenantId) {
+        return mapper.selectResignedUserListByTenant(tenantId);
+    }
 
+    @Override
+    public UsersVO readWorkStts(String userId) {
+        return mapper.selectWorkStts(userId);
+    }
 
-		if (result) {
-			communityService.syncOrgCommunities("system", true);
-		}
-		return result;
-	}
+    @Override
+    public boolean modifyWorkStts(String userId, String workSttsCd) {
+        return mapper.updateWorkStts(userId, workSttsCd) > 0;
+    }
 
-	@Override
-	public boolean retireUser(String userId) {
-		boolean retired = mapper.retireUser(userId) > 0;
-		if (retired) {
-			communityService.syncOrgCommunities("system", true);
-		}
-		return retired;
-	}
+    @Override
+    public boolean createUserList(List<UsersVO> userList) {
+        boolean success = true;
+        for (UsersVO user : userList) {
+            encodePassword(user);
+            ensureLoginId(user);
+            int result = mapper.insertUser(user);
+            if (result <= 0) {
+                success = false;
+                continue;
+            }
+            upsertTenantMembership(user);
+        }
+        if (success && !userList.isEmpty()) {
+            syncTenantCommunities(userList.get(0).getTenantId());
+        }
+        return success;
+    }
 
-	@Override
-	public List<UsersVO> searchUsers(String term) {
-		return mapper.selectUsersByTerm(term);
-	}
+    private void writeUserHistory(UsersVO before, UsersVO user, boolean result) {
+        boolean deptChanged = !Objects.equals(before.getDeptId(), user.getDeptId());
+        boolean jbgdChanged = !Objects.equals(before.getJbgdCd(), user.getJbgdCd());
+        if (!result || (!deptChanged && !jbgdChanged)) {
+            return;
+        }
 
-	@Override
-	public List<UsersVO> readResignedUserList() {
-		return mapper.selectResignedUserList();
-	}
+        UserHistoryVO hist = new UserHistoryVO();
+        hist.setUserId(user.getUserId());
+        hist.setBeforeDeptId(before.getDeptId());
+        hist.setAfterDeptId(user.getDeptId());
+        hist.setBeforeJbgdCd(before.getJbgdCd());
+        hist.setAfterJbgdCd(user.getJbgdCd());
+        hist.setReason("Administrator updated profile.");
 
-	@Override
-	public UsersVO readWorkStts(String UserId) {
-		return mapper.selectWorkStts(UserId);
-	}
+        if (deptChanged && jbgdChanged) {
+            hist.setChangeType("03");
+        } else if (deptChanged) {
+            hist.setChangeType("01");
+        } else if (jbgdChanged) {
+            hist.setChangeType("02");
+        }
 
-	@Override
-	public boolean modifyWorkStts(String UserId, String WorkSttsCd) {
-		return mapper.updateWorkStts(UserId, WorkSttsCd) > 0;
-	}
+        historyMapper.insertUserHistory(hist);
+    }
 
-	@Override
-	public boolean createUserList(List<UsersVO> userList) {
-		boolean success = true;
-		for(UsersVO user : userList) {
+    private void encodePassword(UsersVO user) {
+        if (user != null && StringUtils.hasText(user.getUserPswd())) {
+            user.setUserPswd(passwordEncoder.encode(user.getUserPswd()));
+        }
+    }
 
-			if(user.getUserPswd() != null && !user.getUserPswd().isBlank()) {
-				user.setUserPswd(passwordEncoder.encode(user.getUserPswd()));
-			}
+    private void ensureLoginId(UsersVO user) {
+        if (user == null) {
+            return;
+        }
+        if (!StringUtils.hasText(user.getLoginId())) {
+            if (StringUtils.hasText(user.getUserEmail())) {
+                user.setLoginId(user.getUserEmail().trim().toLowerCase());
+            } else {
+                user.setLoginId(user.getUserId());
+            }
+        }
+    }
 
-			int result = mapper.insertUser(user);
-			if(result <= 0) success = false;
-		}
-		if (success && !userList.isEmpty()) {
-			communityService.syncOrgCommunities("system", true);
-		}
-		return success;
-	}
+    private void upsertTenantMembership(UsersVO user) {
+        if (user == null || !StringUtils.hasText(user.getTenantId())) {
+            return;
+        }
+        TenantMembershipVO membership = new TenantMembershipVO();
+        membership.setTenantId(user.getTenantId());
+        membership.setUserId(user.getUserId());
+        membership.setTenantRoleCd(StringUtils.hasText(user.getTenantRoleCd()) ? user.getTenantRoleCd() : "MEMBER");
+        membership.setMembershipStatusCd("ACTIVE");
+        tenantPlatformMapper.insertTenantMember(membership);
+    }
+
+    private void syncTenantCommunities(String tenantId) {
+        if (StringUtils.hasText(tenantId)) {
+            communityService.syncOrgCommunities(tenantId, "system", true);
+        }
+    }
 }

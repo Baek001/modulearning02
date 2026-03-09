@@ -1,18 +1,37 @@
-﻿import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { authAPI, STORAGE_KEYS } from '../services/api';
 
 /* eslint-disable react-refresh/only-export-components */
 
 const AuthContext = createContext(null);
 
-function clearStoredUser() {
-    localStorage.removeItem(STORAGE_KEYS.user);
+function isPublicAuthPath(pathname = '') {
+    return pathname === '/login'
+        || pathname === '/signup'
+        || pathname.startsWith('/invite/accept');
 }
 
-function normalizeUser(data, fallbackUserId = '') {
+function clearStoredSession() {
+    localStorage.removeItem(STORAGE_KEYS.user);
+    localStorage.removeItem(STORAGE_KEYS.session);
+}
+
+function normalizeMembership(data = {}) {
+    return {
+        tenantId: data?.tenantId || '',
+        tenantNm: data?.tenantNm || '',
+        tenantSlug: data?.tenantSlug || '',
+        tenantRoleCd: data?.tenantRoleCd || 'MEMBER',
+        userId: data?.userId || '',
+        userEmail: data?.userEmail || '',
+        deptNm: data?.deptNm || '',
+    };
+}
+
+function normalizeUser(data, fallbackUserId = '', currentTenant = null) {
     return {
         userId: data?.userId || fallbackUserId,
-        userNm: data?.userNm || fallbackUserId || '모두의 러닝 사용자',
+        userNm: data?.userNm || fallbackUserId || 'Workspace user',
         deptNm: data?.deptNm || '',
         jbgdNm: data?.jbgdNm || '',
         userEmail: data?.userEmail || '',
@@ -20,28 +39,60 @@ function normalizeUser(data, fallbackUserId = '') {
         userRole: data?.userRole || '',
         workSttsCd: data?.workSttsCd || '',
         extTel: data?.extTel || '',
+        tenantId: data?.tenantId || currentTenant?.tenantId || '',
+        tenantNm: data?.tenantNm || currentTenant?.tenantNm || '',
+        tenantSlug: data?.tenantSlug || currentTenant?.tenantSlug || '',
+        tenantRoleCd: data?.tenantRoleCd || currentTenant?.tenantRoleCd || 'MEMBER',
+    };
+}
+
+function normalizeSession(data, fallbackUserId = '') {
+    const rawUser = data?.user || data || {};
+    const memberships = Array.isArray(data?.memberships) ? data.memberships.map(normalizeMembership) : [];
+    const currentTenant = normalizeMembership(
+        data?.currentTenant
+        || memberships.find((item) => item.tenantId && item.tenantId === rawUser?.tenantId)
+        || {}
+    );
+
+    return {
+        user: normalizeUser(rawUser, fallbackUserId, currentTenant),
+        currentTenant,
+        memberships,
     };
 }
 
 export function AuthProvider({ children }) {
     const [user, setUser] = useState(null);
+    const [currentTenant, setCurrentTenant] = useState(null);
+    const [memberships, setMemberships] = useState([]);
     const [loading, setLoading] = useState(true);
+
+    function applySession(nextSession) {
+        localStorage.setItem(STORAGE_KEYS.session, JSON.stringify(nextSession));
+        localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(nextSession.user));
+        setUser(nextSession.user);
+        setCurrentTenant(nextSession.currentTenant);
+        setMemberships(nextSession.memberships);
+    }
 
     useEffect(() => {
         let active = true;
 
         async function initializeAuth() {
-            const stored = localStorage.getItem(STORAGE_KEYS.user);
-            const shouldAttemptSession = Boolean(stored) || window.location.pathname !== '/login';
+            const stored = localStorage.getItem(STORAGE_KEYS.session);
+            const shouldAttemptSession = Boolean(stored) || !isPublicAuthPath(window.location.pathname);
             let storedUserId = '';
 
             if (stored) {
                 try {
-                    const parsedUser = JSON.parse(stored);
-                    storedUserId = parsedUser.userId || '';
-                    setUser(parsedUser);
+                    const parsedSession = JSON.parse(stored);
+                    storedUserId = parsedSession?.user?.userId || '';
+                    setUser(parsedSession.user || null);
+                    setCurrentTenant(parsedSession.currentTenant || null);
+                    setMemberships(parsedSession.memberships || []);
                 } catch {
-                    clearStoredUser();
+                    clearStoredSession();
                 }
             }
 
@@ -58,16 +109,17 @@ export function AuthProvider({ children }) {
                     return;
                 }
 
-                const nextUser = normalizeUser(response.data, storedUserId);
-                localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(nextUser));
-                setUser(nextUser);
+                const nextSession = normalizeSession(response.data, storedUserId);
+                applySession(nextSession);
             } catch {
                 if (!active) {
                     return;
                 }
 
-                clearStoredUser();
+                clearStoredSession();
                 setUser(null);
+                setCurrentTenant(null);
+                setMemberships([]);
             } finally {
                 if (active) {
                     setLoading(false);
@@ -82,15 +134,50 @@ export function AuthProvider({ children }) {
         };
     }, []);
 
-    const login = async (userId, password) => {
-        await authAPI.login(userId, password);
-        const response = await authAPI.session();
-        const nextUser = normalizeUser(response.data, userId);
+    const login = async (identifier, password, tenantId = '') => {
+        const response = await authAPI.login(identifier, password, tenantId);
+        const nextSession = normalizeSession(response.data, identifier);
 
-        localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(nextUser));
-        setUser(nextUser);
+        applySession(nextSession);
+        return nextSession;
+    };
 
-        return nextUser;
+    const switchTenant = async (tenantId) => {
+        const response = await authAPI.switchTenant(tenantId);
+        const nextSession = normalizeSession(response.data, user?.userId || '');
+
+        applySession(nextSession);
+        return nextSession;
+    };
+
+    const updateUserProfile = (nextProfile) => {
+        const nextUser = normalizeUser(
+            { ...user, ...nextProfile },
+            user?.userId || nextProfile?.userId || '',
+            currentTenant
+        );
+        const nextCurrentTenant = currentTenant
+            ? normalizeMembership({
+                ...currentTenant,
+                userEmail: nextUser.userEmail,
+                deptNm: nextUser.deptNm || currentTenant.deptNm,
+            })
+            : currentTenant;
+        const nextMemberships = memberships.map((membership) => (
+            membership.tenantId === nextCurrentTenant?.tenantId
+                ? normalizeMembership({
+                    ...membership,
+                    userEmail: nextUser.userEmail,
+                    deptNm: nextUser.deptNm || membership.deptNm,
+                })
+                : membership
+        ));
+
+        applySession({
+            user: nextUser,
+            currentTenant: nextCurrentTenant,
+            memberships: nextMemberships,
+        });
     };
 
     const logout = async () => {
@@ -100,16 +187,22 @@ export function AuthProvider({ children }) {
             // Ignore revoke errors during local cleanup.
         }
 
-        clearStoredUser();
+        clearStoredSession();
         setUser(null);
+        setCurrentTenant(null);
+        setMemberships([]);
     };
 
     const value = useMemo(() => ({
         user,
+        currentTenant,
+        memberships,
         login,
         logout,
+        switchTenant,
+        updateUserProfile,
         loading,
-    }), [user, loading]);
+    }), [user, currentTenant, memberships, loading]);
 
     return (
         <AuthContext.Provider value={value}>

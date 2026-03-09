@@ -34,11 +34,21 @@ Recommended public URL pattern:
 - `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`
 - `JWT_SECRET_KEY`
 - `APP_FRONTEND_BASE_URL`, `CORS_ALLOW_ORIGINS`, `COOKIE_DOMAIN`
+- `SIGNUP_TURNSTILE_ENABLED`, `SIGNUP_TURNSTILE_SITE_KEY`, `SIGNUP_TURNSTILE_SECRET_KEY` when owner self-signup should be protected publicly
 - `AWS_ACCESS_KEY`, `AWS_SECRET_KEY`, `AWS_BUCKET`, `AWS_ENDPOINT`
 - `AWS_REGION` should match the value in `wrangler.jsonc`
 - `AWS_PUBLIC_BASE_URL` if you want existing direct file links to keep working without frontend changes
 
 Non-secret defaults such as `FILE_STORAGE_MODE=s3`, `COOKIE_SAME_SITE=Lax`, and the backend port stay in `wrangler.jsonc`.
+
+Recommended owner-signup protection defaults:
+- `SIGNUP_TURNSTILE_ENABLED=true`
+- `SIGNUP_RATE_LIMIT_IP_MAX_ATTEMPTS=10`
+- `SIGNUP_RATE_LIMIT_IP_WINDOW_SECONDS=600`
+- `SIGNUP_RATE_LIMIT_EMAIL_MAX_ATTEMPTS=5`
+- `SIGNUP_RATE_LIMIT_EMAIL_WINDOW_SECONDS=3600`
+- `SIGNUP_RATE_LIMIT_SLUG_MAX_ATTEMPTS=5`
+- `SIGNUP_RATE_LIMIT_SLUG_WINDOW_SECONDS=3600`
 
 When using the default `workers.dev` hostname:
 - Set `APP_FRONTEND_BASE_URL` to the Worker URL.

@@ -5,7 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 
 export default function MyPage() {
     const navigate = useNavigate();
-    const { user, logout } = useAuth();
+    const { user, currentTenant, logout, updateUserProfile } = useAuth();
     const [profile, setProfile] = useState(null);
     const [loading, setLoading] = useState(true);
     const [savingProfile, setSavingProfile] = useState(false);
@@ -35,12 +35,14 @@ export default function MyPage() {
     const infoRows = useMemo(
         () => ([
             ['아이디', currentUser.userId || '-'],
+            ['워크스페이스', currentTenant?.tenantNm || currentUser.tenantNm || '-'],
+            ['테넌트 역할', currentUser.tenantRoleCd || '-'],
             ['권한', currentUser.userRole || '-'],
             ['입사일', currentUser.hireYmd || '-'],
             ['부서', currentUser.deptNm || '-'],
             ['직급', currentUser.jbgdNm || '-'],
         ]),
-        [currentUser]
+        [currentTenant, currentUser]
     );
 
     async function loadProfile() {
@@ -49,7 +51,7 @@ export default function MyPage() {
 
         try {
             const response = await myPageAPI.profile();
-            const nextProfile = response.data;
+            const nextProfile = response.data?.user || response.data;
             setProfile(nextProfile);
             setProfileForm({
                 userNm: nextProfile.userNm || '',
@@ -75,6 +77,7 @@ export default function MyPage() {
             const response = await myPageAPI.updateProfile(profileForm);
             const nextProfile = response.data;
             setProfile(nextProfile);
+            updateUserProfile(nextProfile);
             setProfileForm({
                 userNm: nextProfile.userNm || '',
                 userEmail: nextProfile.userEmail || '',
@@ -179,7 +182,7 @@ export default function MyPage() {
                                     {loading ? '불러오는 중...' : currentUser.userNm || '-'}
                                 </h3>
                                 <p style={{ color: 'var(--gray-500)' }}>
-                                    {(currentUser.deptNm || '-') + ' / ' + (currentUser.jbgdNm || '-')}
+                                    {[currentTenant?.tenantNm || currentUser.tenantNm, currentUser.deptNm || '-', currentUser.jbgdNm || '-'].filter(Boolean).join(' / ')}
                                 </p>
                             </div>
 

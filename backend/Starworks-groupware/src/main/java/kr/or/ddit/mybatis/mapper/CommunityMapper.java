@@ -12,6 +12,7 @@ import kr.or.ddit.vo.CommunityVO;
 public interface CommunityMapper {
 
     List<CommunityVO> selectCommunities(
+        @Param("tenantId") String tenantId,
         @Param("userId") String userId,
         @Param("keyword") String keyword,
         @Param("view") String view,
@@ -20,6 +21,7 @@ public interface CommunityMapper {
     );
 
     CommunityVO selectCommunity(
+        @Param("tenantId") String tenantId,
         @Param("communityId") Long communityId,
         @Param("userId") String userId,
         @Param("admin") boolean admin
@@ -31,11 +33,11 @@ public interface CommunityMapper {
 
     int deleteCommunity(@Param("communityId") Long communityId, @Param("userId") String userId);
 
-    List<CommunityMemberVO> selectCommunityMembers(@Param("communityId") Long communityId, @Param("statusCd") String statusCd);
+    List<CommunityMemberVO> selectCommunityMembers(@Param("tenantId") String tenantId, @Param("communityId") Long communityId, @Param("statusCd") String statusCd);
 
     int upsertCommunityMember(CommunityMemberVO member);
 
     int removeCommunityMember(@Param("communityId") Long communityId, @Param("userId") String userId);
 
-    boolean existsActiveMember(@Param("communityId") Long communityId, @Param("userId") String userId);
+    boolean existsActiveMember(@Param("tenantId") String tenantId, @Param("communityId") Long communityId, @Param("userId") String userId);
 }

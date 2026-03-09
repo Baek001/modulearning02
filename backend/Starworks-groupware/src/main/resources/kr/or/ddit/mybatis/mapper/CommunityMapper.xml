@@ -4,6 +4,7 @@
 
     <sql id="communityBaseColumns">
         c.COMMUNITY_ID,
+        c.TENANT_ID,
         c.COMMUNITY_NM,
         c.COMMUNITY_DESC,
         c.COMMUNITY_TYPE_CD,
@@ -94,7 +95,8 @@
         LEFT JOIN FILE_DETAIL cover_fd
           ON cover_fd.FILE_ID = c.COVER_FILE_ID
          AND COALESCE(cover_fd.DEL_YN, 'N') = 'N'
-        WHERE COALESCE(c.DEL_YN, 'N') = 'N'
+        WHERE c.TENANT_ID = #{tenantId}
+          AND COALESCE(c.DEL_YN, 'N') = 'N'
           AND COALESCE(c.CLOSED_YN, 'N') = 'N'
           <choose>
               <when test="view == 'discover'">
@@ -151,7 +153,8 @@
         LEFT JOIN FILE_DETAIL cover_fd
           ON cover_fd.FILE_ID = c.COVER_FILE_ID
          AND COALESCE(cover_fd.DEL_YN, 'N') = 'N'
-        WHERE c.COMMUNITY_ID = #{communityId}
+        WHERE c.TENANT_ID = #{tenantId}
+          AND c.COMMUNITY_ID = #{communityId}
           AND COALESCE(c.DEL_YN, 'N') = 'N'
           AND COALESCE(c.CLOSED_YN, 'N') = 'N'
           AND (
@@ -163,6 +166,7 @@
 
     <insert id="insertCommunity" parameterType="kr.or.ddit.vo.CommunityVO" useGeneratedKeys="true" keyProperty="communityId">
         INSERT INTO COMMUNITY (
+            TENANT_ID,
             COMMUNITY_NM,
             COMMUNITY_DESC,
             COMMUNITY_TYPE_CD,
@@ -180,6 +184,7 @@
             CLOSED_YN,
             CLOSED_DT
         ) VALUES (
+            #{tenantId},
             #{communityNm},
             #{communityDesc},
             COALESCE(#{communityTypeCd}, 'general'),
@@ -232,6 +237,7 @@
     <select id="selectCommunityMembers" resultType="kr.or.ddit.vo.CommunityMemberVO">
         SELECT
             cm.COMMUNITY_ID,
+            c.TENANT_ID,
             cm.USER_ID,
             cm.ROLE_CD,
             cm.STATUS_CD,
@@ -243,6 +249,8 @@
             j.JBGD_NM,
             fd.FILE_PATH
         FROM COMMUNITY_MEMBER cm
+        JOIN COMMUNITY c
+          ON c.COMMUNITY_ID = cm.COMMUNITY_ID
         JOIN USERS u
           ON u.USER_ID = cm.USER_ID
         LEFT JOIN DEPARTMENT d
@@ -252,7 +260,8 @@
         LEFT JOIN FILE_DETAIL fd
           ON fd.FILE_ID = u.USER_IMG_FILE_ID
          AND COALESCE(fd.DEL_YN, 'N') = 'N'
-        WHERE cm.COMMUNITY_ID = #{communityId}
+        WHERE c.TENANT_ID = #{tenantId}
+          AND cm.COMMUNITY_ID = #{communityId}
           <if test="statusCd != null and statusCd != ''">
               AND cm.STATUS_CD = #{statusCd}
           </if>
@@ -305,10 +314,13 @@
     <select id="existsActiveMember" resultType="boolean">
         SELECT EXISTS (
             SELECT 1
-            FROM COMMUNITY_MEMBER
-            WHERE COMMUNITY_ID = #{communityId}
-              AND USER_ID = #{userId}
-              AND STATUS_CD = 'active'
+            FROM COMMUNITY_MEMBER cm
+            JOIN COMMUNITY c
+              ON c.COMMUNITY_ID = cm.COMMUNITY_ID
+            WHERE c.TENANT_ID = #{tenantId}
+              AND cm.COMMUNITY_ID = #{communityId}
+              AND cm.USER_ID = #{userId}
+              AND cm.STATUS_CD = 'active'
         )
     </select>
 </mapper>
