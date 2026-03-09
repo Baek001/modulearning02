@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { alarmAPI, messengerAPI } from '../services/api';
+import UserAvatar from './UserAvatar';
 
 function websocketUrl() {
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
@@ -149,7 +150,6 @@ export default function Topbar() {
     const [switchingTenant, setSwitchingTenant] = useState(false);
     const [tenantError, setTenantError] = useState('');
 
-    const initials = user?.userNm ? user.userNm.charAt(0) : '?';
     const unreadAlarmCount = useMemo(() => alarms.filter((item) => item.readYn !== 'Y').length, [alarms]);
     const unreadMessageCount = messagePanel?.unreadMessageCount || 0;
     const currentTenantId = currentTenant?.tenantId || '';
@@ -542,7 +542,11 @@ export default function Topbar() {
                         aria-expanded={openMenu === 'user'}
                         onClick={handleOpenUserMenu}
                     >
-                        <div className="topbar-user-avatar">{initials}</div>
+                        <UserAvatar
+                            className="topbar-user-avatar"
+                            userName={user?.userNm || user?.userId || 'Guest'}
+                            filePath={user?.filePath}
+                        />
                         <div className="topbar-user-info">
                             <span className="topbar-user-name">{user?.userNm || 'Guest'}</span>
                             <span className="topbar-user-role">{userRoleLine || '워크스페이스 없음'}</span>

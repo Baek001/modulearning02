@@ -14,13 +14,19 @@ function buildInitialForm(invitation) {
 
 export default function InvitationAcceptPage() {
     const { token = '' } = useParams();
-    const { login } = useAuth();
+    const { login, user, loading: authLoading } = useAuth();
     const navigate = useNavigate();
     const [invitation, setInvitation] = useState(null);
     const [form, setForm] = useState(buildInitialForm());
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState('');
+
+    useEffect(() => {
+        if (!authLoading && user) {
+            navigate(user.onboardingComplete ? '/' : '/onboarding', { replace: true });
+        }
+    }, [authLoading, navigate, user]);
 
     useEffect(() => {
         let active = true;
@@ -81,8 +87,8 @@ export default function InvitationAcceptPage() {
                 password: form.password,
             });
             const tenantId = response.data?.tenant?.tenantId || '';
-            await login(form.userEmail, form.password, tenantId);
-            navigate('/', { replace: true });
+            const session = await login(form.userEmail, form.password, tenantId);
+            navigate(session.user?.onboardingComplete ? '/' : '/onboarding', { replace: true });
         } catch (requestError) {
             setError(requestError.response?.data?.message || '초대 수락에 실패했습니다.');
         } finally {
@@ -96,7 +102,7 @@ export default function InvitationAcceptPage() {
                 <div className="login-logo">
                     <div className="logo-mark">ML</div>
                     <h2>워크스페이스 초대 수락</h2>
-                    <p>초대받은 회사에 계정을 연결하고 바로 로그인합니다.</p>
+                    <p>초대받은 회사 계정을 연결하고 바로 첫 로그인 설정을 진행합니다.</p>
                 </div>
 
                 {loading ? (
@@ -107,16 +113,14 @@ export default function InvitationAcceptPage() {
                     </div>
                 ) : (
                     <>
-                        {invitation && (
-                            <div className="card" style={{ marginBottom: 'var(--spacing-md)', boxShadow: 'none', border: '1px solid var(--gray-200)' }}>
-                                <div className="card-body" style={{ padding: 'var(--spacing-md)' }}>
-                                    <strong>{invitation.tenantNm || '워크스페이스'}</strong>
-                                    <div style={{ marginTop: 'var(--spacing-xs)', color: 'var(--gray-500)' }}>
-                                        역할: {invitation.tenantRoleCd || 'MEMBER'}
-                                    </div>
+                        <div className="card" style={{ marginBottom: 'var(--spacing-md)', boxShadow: 'none', border: '1px solid var(--gray-200)' }}>
+                            <div className="card-body" style={{ padding: 'var(--spacing-md)' }}>
+                                <strong>{invitation.tenantNm || '워크스페이스'}</strong>
+                                <div style={{ marginTop: 'var(--spacing-xs)', color: 'var(--gray-500)' }}>
+                                    역할: {invitation.tenantRoleCd || 'MEMBER'}
                                 </div>
                             </div>
-                        )}
+                        </div>
 
                         <form onSubmit={handleSubmit}>
                             {error && (

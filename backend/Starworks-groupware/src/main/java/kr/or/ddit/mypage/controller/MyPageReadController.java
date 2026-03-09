@@ -18,6 +18,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import kr.or.ddit.approval.otp.service.OtpService;
 import kr.or.ddit.comm.file.service.FileDetailService;
+import kr.or.ddit.mypage.dto.MyProfileUpdateRequest;
 import kr.or.ddit.mypage.service.MyPageService;
 import kr.or.ddit.security.CustomUserDetails;
 import kr.or.ddit.users.service.UsersService;
@@ -76,7 +77,15 @@ public class MyPageReadController {
 		RedirectAttributes redirectAttributes
 	) {
 		UsersVO loginUser = userDetail.getRealUser();
-		mypageService.updateUserInfo(loginUser.getUserId(), updateUser, fileList);
+		MyProfileUpdateRequest request = new MyProfileUpdateRequest();
+		request.setUserNm(updateUser.getUserNm());
+		request.setUserEmail(updateUser.getUserEmail());
+		request.setUserTelno(updateUser.getUserTelno());
+		request.setExtTel(updateUser.getExtTel());
+		request.setDeptId(updateUser.getDeptId());
+		request.setJbgdCd(updateUser.getJbgdCd());
+		request.setProfileImage(fileList);
+		mypageService.updateUserInfo(loginUser.getUserId(), request);
 
 		// 세션 정보 갱신
 		// 1. 현재 SecurityContext에서 사용자의 인증 정보(Authentication)를 가져오기

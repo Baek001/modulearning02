@@ -13,6 +13,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 import kr.or.ddit.messenger.community.service.CommunityService;
+import kr.or.ddit.mypage.service.UserOnboardingStatusService;
 import kr.or.ddit.mybatis.mapper.DepartmentMapper;
 import kr.or.ddit.mybatis.mapper.TenantPlatformMapper;
 import kr.or.ddit.mybatis.mapper.UsersMapper;
@@ -42,6 +43,7 @@ public class TenantPlatformService {
     private final DepartmentMapper departmentMapper;
     private final PasswordEncoder passwordEncoder;
     private final CommunityService communityService;
+    private final UserOnboardingStatusService userOnboardingStatusService;
 
     @Transactional
     public TenantMembershipVO signUpOwner(TenantSignupRequest request) {
@@ -175,7 +177,7 @@ public class TenantPlatformService {
             .filter(membership -> membership.getTenantId().equals(user.getTenantId()))
             .findFirst()
             .orElseGet(() -> tenantPlatformMapper.selectMembershipByUserIdAndTenant(user.getUserId(), user.getTenantId()));
-        return new AuthSessionResponse(user, currentTenant, memberships);
+        return new AuthSessionResponse(user, currentTenant, memberships, userOnboardingStatusService.isComplete(user));
     }
 
     @Transactional(readOnly = true)

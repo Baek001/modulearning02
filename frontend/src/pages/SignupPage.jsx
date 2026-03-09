@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { publicPlatformAPI } from '../services/api';
 
 export default function SignupPage() {
-    const { login } = useAuth();
+    const { login, user, loading: authLoading } = useAuth();
     const navigate = useNavigate();
     const [ownerEmail, setOwnerEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -16,6 +16,12 @@ export default function SignupPage() {
     const [configLoading, setConfigLoading] = useState(true);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        if (!authLoading && user) {
+            navigate(user.onboardingComplete ? '/' : '/onboarding', { replace: true });
+        }
+    }, [authLoading, navigate, user]);
 
     useEffect(() => {
         let active = true;
@@ -70,7 +76,7 @@ export default function SignupPage() {
             return;
         }
         if (signupConfig.turnstileEnabled) {
-            setError('이 환경에서는 테스트용 간편 회원가입이 비활성화되어 있습니다.');
+            setError('이 환경에서는 보안 확인이 필요해 간편 회원가입을 사용할 수 없습니다.');
             return;
         }
 
@@ -82,8 +88,8 @@ export default function SignupPage() {
                 password,
             });
             const tenantId = response.data?.tenant?.tenantId || '';
-            await login(ownerEmail, password, tenantId);
-            navigate('/', { replace: true });
+            const session = await login(ownerEmail, password, tenantId);
+            navigate(session.user?.onboardingComplete ? '/' : '/onboarding', { replace: true });
         } catch (requestError) {
             setError(requestError.response?.data?.message || '회원가입에 실패했습니다.');
         } finally {
@@ -97,7 +103,7 @@ export default function SignupPage() {
                 <div className="login-logo">
                     <div className="logo-mark">ML</div>
                     <h2>회원가입</h2>
-                    <p>테스트용 계정을 빠르게 만들고 바로 로그인합니다.</p>
+                    <p>테스트용 계정을 빠르게 만들고 첫 로그인에서 프로필을 설정합니다.</p>
                 </div>
 
                 <form onSubmit={handleSubmit}>

@@ -5,6 +5,7 @@ import MainLayout from './layouts/MainLayout';
 
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const SignupPage = lazy(() => import('./pages/SignupPage'));
+const OnboardingPage = lazy(() => import('./pages/OnboardingPage'));
 const InvitationAcceptPage = lazy(() => import('./pages/InvitationAcceptPage'));
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const OrgChartPage = lazy(() => import('./pages/organization/OrgChartPage'));
@@ -42,6 +43,7 @@ function App() {
                 <Routes>
                     <Route path="/login" element={<RoutedPage><LoginPage /></RoutedPage>} />
                     <Route path="/signup" element={<RoutedPage><SignupPage /></RoutedPage>} />
+                    <Route path="/onboarding" element={<RoutedPage><OnboardingPage /></RoutedPage>} />
                     <Route path="/invite/accept/:token" element={<RoutedPage><InvitationAcceptPage /></RoutedPage>} />
                     <Route path="/contract/sign/:token" element={<RoutedPage><ContractSignPage /></RoutedPage>} />
                     <Route element={<MainLayout />}>

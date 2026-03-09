@@ -11,6 +11,25 @@ function isPublicAuthPath(pathname = '') {
         || pathname.startsWith('/invite/accept');
 }
 
+function hasText(value) {
+    return typeof value === 'string' ? value.trim().length > 0 : Boolean(value);
+}
+
+function deriveOnboardingComplete(data, fallback = true) {
+    if (typeof data?.onboardingComplete === 'boolean') {
+        return data.onboardingComplete;
+    }
+
+    const hasProfileFields = ['userNm', 'deptId', 'jbgdCd', 'userTelno']
+        .some((key) => Object.prototype.hasOwnProperty.call(data ?? {}, key));
+
+    if (!hasProfileFields) {
+        return fallback;
+    }
+
+    return ['userNm', 'deptId', 'jbgdCd', 'userTelno'].every((key) => hasText(data?.[key]));
+}
+
 function clearStoredSession() {
     localStorage.removeItem(STORAGE_KEYS.user);
     localStorage.removeItem(STORAGE_KEYS.session);
@@ -28,21 +47,26 @@ function normalizeMembership(data = {}) {
     };
 }
 
-function normalizeUser(data, fallbackUserId = '', currentTenant = null) {
+function normalizeUser(data, fallbackUserId = '', currentTenant = null, onboardingComplete = true) {
     return {
         userId: data?.userId || fallbackUserId,
         userNm: data?.userNm || fallbackUserId || 'Workspace user',
+        deptId: data?.deptId || '',
         deptNm: data?.deptNm || '',
+        jbgdCd: data?.jbgdCd || '',
         jbgdNm: data?.jbgdNm || '',
         userEmail: data?.userEmail || '',
+        userTelno: data?.userTelno || '',
         hireYmd: data?.hireYmd || '',
         userRole: data?.userRole || '',
         workSttsCd: data?.workSttsCd || '',
         extTel: data?.extTel || '',
+        filePath: data?.filePath || '',
         tenantId: data?.tenantId || currentTenant?.tenantId || '',
         tenantNm: data?.tenantNm || currentTenant?.tenantNm || '',
         tenantSlug: data?.tenantSlug || currentTenant?.tenantSlug || '',
         tenantRoleCd: data?.tenantRoleCd || currentTenant?.tenantRoleCd || 'MEMBER',
+        onboardingComplete: deriveOnboardingComplete({ ...data, onboardingComplete }, onboardingComplete),
     };
 }
 
@@ -54,9 +78,13 @@ function normalizeSession(data, fallbackUserId = '') {
         || memberships.find((item) => item.tenantId && item.tenantId === rawUser?.tenantId)
         || {}
     );
+    const onboardingComplete = deriveOnboardingComplete(
+        { ...rawUser, onboardingComplete: data?.onboardingComplete },
+        true
+    );
 
     return {
-        user: normalizeUser(rawUser, fallbackUserId, currentTenant),
+        user: normalizeUser(rawUser, fallbackUserId, currentTenant, onboardingComplete),
         currentTenant,
         memberships,
     };
@@ -76,6 +104,12 @@ export function AuthProvider({ children }) {
         setMemberships(nextSession.memberships);
     }
 
+    function applyAuthSessionData(data, fallbackUserId = user?.userId || '') {
+        const nextSession = normalizeSession(data, fallbackUserId);
+        applySession(nextSession);
+        return nextSession;
+    }
+
     useEffect(() => {
         let active = true;
 
@@ -87,13 +121,12 @@ export function AuthProvider({ children }) {
 
             if (stored) {
                 try {
-                    const parsedSession = JSON.parse(stored);
+                    const parsedSession = normalizeSession(JSON.parse(stored));
                     storedUserId = parsedSession?.user?.userId || '';
-                    const nextUser = parsedSession?.user || null;
-                    setUser(nextUser);
+                    setUser(parsedSession.user || null);
                     setCurrentTenant(parsedSession.currentTenant || null);
                     setMemberships(parsedSession.memberships || []);
-                    hydratedFromStorage = Boolean(nextUser);
+                    hydratedFromStorage = Boolean(parsedSession.user);
                 } catch {
                     clearStoredSession();
                 }
@@ -116,8 +149,7 @@ export function AuthProvider({ children }) {
                     return;
                 }
 
-                const nextSession = normalizeSession(response.data, storedUserId);
-                applySession(nextSession);
+                applyAuthSessionData(response.data, storedUserId);
             } catch {
                 if (!active) {
                     return;
@@ -143,18 +175,12 @@ export function AuthProvider({ children }) {
 
     const login = async (identifier, password, tenantId = '') => {
         const response = await authAPI.login(identifier, password, tenantId);
-        const nextSession = normalizeSession(response.data, identifier);
-
-        applySession(nextSession);
-        return nextSession;
+        return applyAuthSessionData(response.data, identifier);
     };
 
     const switchTenant = async (tenantId) => {
         const response = await authAPI.switchTenant(tenantId);
-        const nextSession = normalizeSession(response.data, user?.userId || '');
-
-        applySession(nextSession);
-        return nextSession;
+        return applyAuthSessionData(response.data, user?.userId || '');
     };
 
     const updateUserProfile = (nextProfile) => {
@@ -200,6 +226,8 @@ export function AuthProvider({ children }) {
         setMemberships([]);
     };
 
+    const needsOnboarding = Boolean(user) && !user.onboardingComplete;
+
     const value = useMemo(() => ({
         user,
         currentTenant,
@@ -208,8 +236,10 @@ export function AuthProvider({ children }) {
         logout,
         switchTenant,
         updateUserProfile,
+        applyAuthSessionData,
         loading,
-    }), [user, currentTenant, memberships, loading]);
+        needsOnboarding,
+    }), [user, currentTenant, memberships, loading, needsOnboarding]);
 
     return (
         <AuthContext.Provider value={value}>

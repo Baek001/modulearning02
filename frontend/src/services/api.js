@@ -460,6 +460,12 @@ export const meetingAPI = {
 
 export const myPageAPI = {
     profile: () => api.get('/rest/mypage'),
+    onboarding: () => api.get('/rest/mypage/onboarding'),
+    completeOnboarding: (data) => api.put('/rest/mypage/onboarding', toFormData(data), {
+        headers: {
+            'Content-Type': 'multipart/form-data',
+        },
+    }),
     updateProfile: (data) => api.put('/rest/mypage/profile', toFormData(data), {
         headers: {
             'Content-Type': 'multipart/form-data',

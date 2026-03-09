@@ -9,13 +9,13 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import kr.or.ddit.mypage.dto.MyOnboardingResponse;
 import kr.or.ddit.mypage.dto.MyPasswordChangeRequest;
 import kr.or.ddit.mypage.dto.MyProfileUpdateRequest;
 import kr.or.ddit.mypage.service.MyPageService;
 import kr.or.ddit.security.CustomUserDetails;
 import kr.or.ddit.tenant.dto.AuthSessionResponse;
 import kr.or.ddit.tenant.service.TenantPlatformService;
-import kr.or.ddit.users.service.UsersService;
 import kr.or.ddit.vo.UsersVO;
 import lombok.RequiredArgsConstructor;
 
@@ -25,7 +25,6 @@ import lombok.RequiredArgsConstructor;
 public class MyPageRestController {
 
     private final MyPageService service;
-    private final UsersService usersService;
     private final TenantPlatformService tenantPlatformService;
 
     @GetMapping
@@ -33,18 +32,26 @@ public class MyPageRestController {
         return tenantPlatformService.buildSession(user.getUsername());
     }
 
+    @GetMapping("/onboarding")
+    public MyOnboardingResponse getOnboardingInfo(@AuthenticationPrincipal CustomUserDetails user) {
+        return service.readOnboarding(user.getUsername());
+    }
+
     @PutMapping("/profile")
     public ResponseEntity<?> updateMyInfo(
         @AuthenticationPrincipal CustomUserDetails user,
         @ModelAttribute MyProfileUpdateRequest request
     ) {
-        UsersVO vo = new UsersVO();
-        vo.setUserNm(request.getUserNm());
-        vo.setUserEmail(request.getUserEmail());
-        vo.setUserTelno(request.getUserTelno());
-        vo.setExtTel(request.getExtTel());
+        return ResponseEntity.ok(service.updateUserInfo(user.getUsername(), request));
+    }
 
-        return ResponseEntity.ok(service.updateUserInfo(user.getUsername(), vo, request.getProfileImage()));
+    @PutMapping("/onboarding")
+    public AuthSessionResponse completeOnboarding(
+        @AuthenticationPrincipal CustomUserDetails user,
+        @ModelAttribute MyProfileUpdateRequest request
+    ) {
+        UsersVO updatedUser = service.completeOnboarding(user.getUsername(), request);
+        return tenantPlatformService.buildSession(updatedUser);
     }
 
     @PutMapping("/password")

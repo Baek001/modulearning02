@@ -11,5 +11,8 @@ public class MyProfileUpdateRequest {
     private String userEmail;
     private String userTelno;
     private String extTel;
+    private String deptId;
+    private String jbgdCd;
+    private String jobGradeName;
     private MultipartFile profileImage;
 }

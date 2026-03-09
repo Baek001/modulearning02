@@ -1,14 +1,20 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function LoginPage() {
-    const { login } = useAuth();
+    const { login, user, loading: authLoading } = useAuth();
     const navigate = useNavigate();
     const [identifier, setIdentifier] = useState('');
     const [userPw, setUserPw] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        if (!authLoading && user) {
+            navigate(user.onboardingComplete ? '/' : '/onboarding', { replace: true });
+        }
+    }, [authLoading, navigate, user]);
 
     async function handleSubmit(event) {
         event.preventDefault();
@@ -20,8 +26,8 @@ export default function LoginPage() {
         setError('');
         setLoading(true);
         try {
-            await login(identifier, userPw);
-            navigate('/', { replace: true });
+            const session = await login(identifier, userPw);
+            navigate(session.user?.onboardingComplete ? '/' : '/onboarding', { replace: true });
         } catch (requestError) {
             setError(requestError.response?.data?.message || '로그인에 실패했습니다. 이메일 또는 로그인 ID와 비밀번호를 확인해 주세요.');
         } finally {
@@ -65,7 +71,7 @@ export default function LoginPage() {
                             id="userPw"
                             className="form-input"
                             type="password"
-                            placeholder="비밀번호를 입력해 주세요"
+                            placeholder="비밀번호를 입력해 주세요."
                             value={userPw}
                             onChange={(event) => setUserPw(event.target.value)}
                             autoComplete="current-password"

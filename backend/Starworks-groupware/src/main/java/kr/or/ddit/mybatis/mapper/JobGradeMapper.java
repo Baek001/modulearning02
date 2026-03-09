@@ -35,5 +35,9 @@ public interface JobGradeMapper {
 	 * @return
 	 */
 	public JobGradeVO selectJobGrade(String jbgdCd);
+
+	public JobGradeVO selectJobGradeByName(String jbgdNm);
+
+	public int insertJobGrade(JobGradeVO jobGrade);
 	
 }

@@ -19,6 +19,10 @@
 			, USE_YN
 		FROM
 			JOB_GRADE
+		WHERE
+			COALESCE(USE_YN, 'Y') = 'Y'
+		ORDER BY
+			JBGD_NM
 	</select>
 	
 	
@@ -34,4 +38,34 @@
 		WHERE
 			JBGD_CD = #{jbgdCd}
 	</select>
+
+	<select id="selectJobGradeByName" resultType="kr.or.ddit.vo.JobGradeVO">
+		SELECT
+			JBGD_CD
+			, JBGD_NM
+			, APPR_ATRZ_YN
+			, CRT_DT
+			, USE_YN
+		FROM
+			JOB_GRADE
+		WHERE
+			UPPER(TRIM(JBGD_NM)) = UPPER(TRIM(#{jbgdNm}))
+		FETCH FIRST 1 ROWS ONLY
+	</select>
+
+	<insert id="insertJobGrade" parameterType="kr.or.ddit.vo.JobGradeVO">
+		INSERT INTO JOB_GRADE (
+			JBGD_CD
+			, JBGD_NM
+			, APPR_ATRZ_YN
+			, CRT_DT
+			, USE_YN
+		) VALUES (
+			#{jbgdCd}
+			, #{jbgdNm}
+			, COALESCE(#{apprAtrzYn}, 'N')
+			, CURRENT_TIMESTAMP
+			, COALESCE(#{useYn}, 'Y')
+		)
+	</insert>
 </mapper>

@@ -8,7 +8,9 @@
             USER_NM = #{userNm},
             USER_TELNO = #{userTelno},
             EXT_TEL = #{extTel},
-            USER_EMAIL = #{userEmail}
+            USER_EMAIL = #{userEmail},
+            DEPT_ID = #{deptId},
+            JBGD_CD = #{jbgdCd}
             <if test="userImgFileId != null and userImgFileId != ''">
                 , USER_IMG_FILE_ID = #{userImgFileId}
             </if>

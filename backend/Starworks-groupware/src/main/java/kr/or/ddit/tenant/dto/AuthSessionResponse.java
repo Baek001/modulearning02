@@ -13,4 +13,5 @@ public class AuthSessionResponse {
     private UsersVO user;
     private TenantMembershipVO currentTenant;
     private List<TenantMembershipVO> memberships;
+    private boolean onboardingComplete;
 }

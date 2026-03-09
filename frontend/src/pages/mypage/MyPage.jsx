@@ -1,24 +1,36 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { myPageAPI, STORAGE_KEYS } from '../../services/api';
+import UserAvatar from '../../components/UserAvatar';
 import { useAuth } from '../../contexts/AuthContext';
+import { myPageAPI } from '../../services/api';
+
+function createProfileForm(nextUser = {}) {
+    return {
+        userNm: nextUser.userNm || '',
+        userEmail: nextUser.userEmail || '',
+        userTelno: nextUser.userTelno || '',
+        extTel: nextUser.extTel || '',
+        deptId: nextUser.deptId || '',
+        jbgdCd: nextUser.jbgdCd || '',
+        jobGradeName: nextUser.jbgdNm || '',
+        profileImage: null,
+    };
+}
 
 export default function MyPage() {
     const navigate = useNavigate();
     const { user, currentTenant, logout, updateUserProfile } = useAuth();
     const [profile, setProfile] = useState(null);
+    const [departments, setDepartments] = useState([]);
+    const [jobGrades, setJobGrades] = useState([]);
+    const [jobGradeFallbackRequired, setJobGradeFallbackRequired] = useState(false);
     const [loading, setLoading] = useState(true);
     const [savingProfile, setSavingProfile] = useState(false);
     const [savingPassword, setSavingPassword] = useState(false);
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
-    const [profileForm, setProfileForm] = useState({
-        userNm: '',
-        userEmail: '',
-        userTelno: '',
-        extTel: '',
-        profileImage: null,
-    });
+    const [previewUrl, setPreviewUrl] = useState('');
+    const [profileForm, setProfileForm] = useState(createProfileForm());
     const [passwordForm, setPasswordForm] = useState({
         currentPassword: '',
         newPassword: '',
@@ -29,8 +41,19 @@ export default function MyPage() {
         loadProfile();
     }, []);
 
+    useEffect(() => {
+        if (!profileForm.profileImage) {
+            setPreviewUrl('');
+            return undefined;
+        }
+
+        const nextPreviewUrl = URL.createObjectURL(profileForm.profileImage);
+        setPreviewUrl(nextPreviewUrl);
+        return () => URL.revokeObjectURL(nextPreviewUrl);
+    }, [profileForm.profileImage]);
+
     const currentUser = profile || user || {};
-    const avatarLabel = (currentUser.userNm || currentUser.userId || '?').charAt(0);
+    const currentAvatarPath = previewUrl || currentUser.filePath || user?.filePath || '';
     const selectedFileName = profileForm.profileImage?.name || '선택된 파일이 없습니다.';
     const infoRows = useMemo(
         () => ([
@@ -50,16 +73,15 @@ export default function MyPage() {
         setError('');
 
         try {
-            const response = await myPageAPI.profile();
-            const nextProfile = response.data?.user || response.data;
+            const response = await myPageAPI.onboarding();
+            const data = response.data || {};
+            const nextProfile = data.user || user || {};
+
             setProfile(nextProfile);
-            setProfileForm({
-                userNm: nextProfile.userNm || '',
-                userEmail: nextProfile.userEmail || '',
-                userTelno: nextProfile.userTelno || '',
-                extTel: nextProfile.extTel || '',
-                profileImage: null,
-            });
+            setDepartments(Array.isArray(data.departments) ? data.departments : []);
+            setJobGrades(Array.isArray(data.jobGrades) ? data.jobGrades : []);
+            setJobGradeFallbackRequired(Boolean(data.jobGradeFallbackRequired));
+            setProfileForm(createProfileForm(nextProfile));
         } catch (requestError) {
             setError(requestError.response?.data?.message || '마이페이지 정보를 불러오지 못했습니다.');
         } finally {
@@ -76,32 +98,11 @@ export default function MyPage() {
         try {
             const response = await myPageAPI.updateProfile(profileForm);
             const nextProfile = response.data;
+
             setProfile(nextProfile);
             updateUserProfile(nextProfile);
-            setProfileForm({
-                userNm: nextProfile.userNm || '',
-                userEmail: nextProfile.userEmail || '',
-                userTelno: nextProfile.userTelno || '',
-                extTel: nextProfile.extTel || '',
-                profileImage: null,
-            });
+            setProfileForm(createProfileForm(nextProfile));
             setNotice('프로필 정보를 저장했습니다.');
-
-            const stored = localStorage.getItem(STORAGE_KEYS.user);
-            if (stored) {
-                try {
-                    const parsed = JSON.parse(stored);
-                    localStorage.setItem(STORAGE_KEYS.user, JSON.stringify({
-                        ...parsed,
-                        userNm: nextProfile?.userNm || parsed.userNm,
-                        userEmail: nextProfile?.userEmail || parsed.userEmail,
-                        userTelno: nextProfile?.userTelno || parsed.userTelno,
-                        extTel: nextProfile?.extTel || parsed.extTel,
-                    }));
-                } catch {
-                    // Ignore malformed local storage.
-                }
-            }
         } catch (requestError) {
             setError(requestError.response?.data?.message || '프로필 저장에 실패했습니다.');
         } finally {
@@ -145,7 +146,7 @@ export default function MyPage() {
             <div className="page-header">
                 <div>
                     <h2>마이페이지</h2>
-                    <p>프로필과 비밀번호를 현재 계정 정보에 맞춰 안전하게 관리합니다.</p>
+                    <p>프로필, 조직 정보, 프로필 사진과 비밀번호를 현재 계정 정보에 맞춰 관리합니다.</p>
                 </div>
             </div>
 
@@ -165,19 +166,21 @@ export default function MyPage() {
                     <div className="card-body" style={{ padding: 'var(--spacing-2xl)' }}>
                         <div style={{ display: 'grid', gap: 'var(--spacing-lg)' }}>
                             <div style={{ textAlign: 'center' }}>
-                                <div
+                                <UserAvatar
                                     className="avatar avatar-lg"
+                                    userName={currentUser.userNm || currentUser.userId || 'User'}
+                                    filePath={currentAvatarPath}
                                     style={{
                                         width: '96px',
                                         height: '96px',
                                         borderRadius: '28px',
                                         margin: '0 auto var(--spacing-md)',
                                         background: 'linear-gradient(135deg, #0f766e, #0284c7)',
+                                        color: '#fff',
                                         fontSize: '40px',
+                                        fontWeight: 700,
                                     }}
-                                >
-                                    {avatarLabel}
-                                </div>
+                                />
                                 <h3 style={{ fontSize: 'var(--font-size-xl)', fontWeight: 700, marginBottom: 'var(--spacing-xs)' }}>
                                     {loading ? '불러오는 중...' : currentUser.userNm || '-'}
                                 </h3>
@@ -248,6 +251,50 @@ export default function MyPage() {
                                             value={profileForm.extTel}
                                             onChange={(event) => setProfileForm((current) => ({ ...current, extTel: event.target.value }))}
                                         />
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="form-label" htmlFor="mypage-user-department">부서</label>
+                                        <select
+                                            id="mypage-user-department"
+                                            className="form-input"
+                                            value={profileForm.deptId}
+                                            onChange={(event) => setProfileForm((current) => ({ ...current, deptId: event.target.value }))}
+                                        >
+                                            <option value="">부서를 선택해 주세요.</option>
+                                            {departments.map((department) => (
+                                                <option key={department.deptId} value={department.deptId}>
+                                                    {department.deptNm}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="form-label" htmlFor="mypage-user-job-grade">
+                                            {jobGradeFallbackRequired ? '직급 입력' : '직급'}
+                                        </label>
+                                        {jobGradeFallbackRequired ? (
+                                            <input
+                                                id="mypage-user-job-grade"
+                                                type="text"
+                                                className="form-input"
+                                                value={profileForm.jobGradeName}
+                                                onChange={(event) => setProfileForm((current) => ({ ...current, jobGradeName: event.target.value }))}
+                                            />
+                                        ) : (
+                                            <select
+                                                id="mypage-user-job-grade"
+                                                className="form-input"
+                                                value={profileForm.jbgdCd}
+                                                onChange={(event) => setProfileForm((current) => ({ ...current, jbgdCd: event.target.value }))}
+                                            >
+                                                <option value="">직급을 선택해 주세요.</option>
+                                                {jobGrades.map((jobGrade) => (
+                                                    <option key={jobGrade.jbgdCd} value={jobGrade.jbgdCd}>
+                                                        {jobGrade.jbgdNm}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        )}
                                     </div>
                                     <div className="form-group form-span-2">
                                         <label className="form-label">프로필 이미지</label>

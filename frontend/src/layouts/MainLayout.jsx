@@ -5,7 +5,7 @@ import Topbar from '../components/Topbar';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function MainLayout() {
-    const { user, loading } = useAuth();
+    const { user, loading, needsOnboarding } = useAuth();
     const location = useLocation();
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
@@ -23,6 +23,7 @@ export default function MainLayout() {
     }
 
     if (!user) return <Navigate to="/login" replace />;
+    if (needsOnboarding) return <Navigate to="/onboarding" replace />;
 
     return (
         <div className={`app-layout ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
