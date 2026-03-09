@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="UTF-8"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="kr.or.ddit.mybatis.mapper.MessengerRoomMapper">
 
@@ -129,6 +129,143 @@
         <include refid="roomSelectJoins" />
         WHERE COALESCE(r.DEL_YN, 'N') = 'N'
         ORDER BY COALESCE(last_msg.SEND_DT, r.CRT_DT) DESC, r.CRT_DT DESC
+    </select>
+
+    <select id="selectMyRoomSummaries" resultType="kr.or.ddit.vo.MessengerRoomVO">
+        SELECT
+            room_summary.MSGR_ID,
+            room_summary.MSGR_NM,
+            room_summary.CRT_DT,
+            room_summary.ROOM_TYPE_CD,
+            room_summary.NOTIFY_YN,
+            room_summary.LAST_MSG_CONT,
+            room_summary.LAST_MSG_DT,
+            room_summary.UNREAD_COUNT
+        FROM (
+            SELECT
+                r.MSGR_ID,
+                CASE
+                    WHEN COALESCE(r.ROOM_TYPE_CD, 'group') = 'self' THEN 'Self chat'
+                    WHEN COALESCE(r.ROOM_TYPE_CD, 'group') = 'private' THEN COALESCE(partner.USER_NM, NULLIF(r.MSGR_NM, ''), '1:1 chat')
+                    ELSE COALESCE(NULLIF(r.MSGR_NM, ''), member_names.MEMBER_NAMES, 'Group chat')
+                END AS MSGR_NM,
+                r.CRT_DT,
+                COALESCE(r.ROOM_TYPE_CD, 'group') AS ROOM_TYPE_CD,
+                mu.NOTIFY_YN,
+                last_msg.LAST_MSG_CONT,
+                last_msg.SEND_DT AS LAST_MSG_DT,
+                COALESCE(unread_info.UNREAD_COUNT, 0) AS UNREAD_COUNT
+            FROM MESSENGER_ROOM r
+            INNER JOIN MESSENGER_USER mu
+                ON r.MSGR_ID = mu.MSGR_ID
+               AND mu.USER_ID = #{userId}
+               AND mu.LEFT_DT IS NULL
+            LEFT JOIN LATERAL (
+                SELECT
+                    u.USER_NM
+                FROM MESSENGER_USER mu2
+                JOIN USERS u ON mu2.USER_ID = u.USER_ID
+                WHERE mu2.MSGR_ID = r.MSGR_ID
+                  AND mu2.USER_ID &lt;&gt; #{userId}
+                  AND mu2.LEFT_DT IS NULL
+                ORDER BY mu2.JOIN_DT
+                LIMIT 1
+            ) partner ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT
+                    STRING_AGG(u.USER_NM, ', ' ORDER BY u.USER_NM) AS MEMBER_NAMES
+                FROM MESSENGER_USER mu3
+                JOIN USERS u ON mu3.USER_ID = u.USER_ID
+                WHERE mu3.MSGR_ID = r.MSGR_ID
+                  AND mu3.LEFT_DT IS NULL
+            ) member_names ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT
+                    CASE
+                        WHEN COALESCE(c.MSG_TYPE_CD, 'text') = 'file' THEN '[file] ' || COALESCE(c.CONTENTS, 'Attachment')
+                        WHEN COALESCE(c.MSG_TYPE_CD, 'text') = 'system' THEN c.CONTENTS
+                        ELSE c.CONTENTS
+                    END AS LAST_MSG_CONT,
+                    c.SEND_DT
+                FROM MESSENGER_CONTENT c
+                WHERE c.MSGR_ID = r.MSGR_ID
+                  AND COALESCE(c.DEL_YN, 'N') = 'N'
+                ORDER BY c.SEND_DT DESC
+                LIMIT 1
+            ) last_msg ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT COUNT(*) AS UNREAD_COUNT
+                FROM MESSENGER_CONTENT c
+                LEFT JOIN MESSENGER_READ mr
+                    ON mr.MSG_CONT_ID = c.MSG_CONT_ID
+                   AND mr.USER_ID = #{userId}
+                WHERE c.MSGR_ID = r.MSGR_ID
+                  AND c.USER_ID &lt;&gt; #{userId}
+                  AND COALESCE(c.DEL_YN, 'N') = 'N'
+                  AND mr.MSG_CONT_ID IS NULL
+            ) unread_info ON TRUE
+            WHERE COALESCE(r.DEL_YN, 'N') = 'N'
+            <if test="notifyOnly">
+              AND COALESCE(mu.NOTIFY_YN, 'Y') &lt;&gt; 'N'
+            </if>
+            <if test="type != null and type != '' and type != 'all'">
+              AND COALESCE(r.ROOM_TYPE_CD, 'group') = #{type}
+            </if>
+        ) room_summary
+        <where>
+            <if test="scope != null and scope == 'unread'">
+                room_summary.UNREAD_COUNT &gt; 0
+            </if>
+            <if test="keyword != null and keyword != ''">
+                <if test="scope != null and scope == 'unread'">
+                    AND
+                </if>
+                (
+                    COALESCE(room_summary.MSGR_NM, '') ILIKE CONCAT('%', #{keyword}, '%')
+                    OR COALESCE(room_summary.LAST_MSG_CONT, '') ILIKE CONCAT('%', #{keyword}, '%')
+                )
+            </if>
+        </where>
+        ORDER BY COALESCE(room_summary.LAST_MSG_DT, room_summary.CRT_DT) DESC, room_summary.CRT_DT DESC
+        <if test="limit != null and limit &gt; 0">
+            LIMIT #{limit}
+        </if>
+    </select>
+
+    <select id="countUnreadRoomsForNotifiedUser" resultType="int">
+        SELECT COUNT(*)
+        FROM (
+            SELECT c.MSGR_ID
+            FROM MESSENGER_CONTENT c
+            INNER JOIN MESSENGER_USER mu
+                ON mu.MSGR_ID = c.MSGR_ID
+               AND mu.USER_ID = #{userId}
+               AND mu.LEFT_DT IS NULL
+               AND COALESCE(mu.NOTIFY_YN, 'Y') &lt;&gt; 'N'
+            LEFT JOIN MESSENGER_READ mr
+                ON mr.MSG_CONT_ID = c.MSG_CONT_ID
+               AND mr.USER_ID = #{userId}
+            WHERE c.USER_ID &lt;&gt; #{userId}
+              AND COALESCE(c.DEL_YN, 'N') = 'N'
+              AND mr.MSG_CONT_ID IS NULL
+            GROUP BY c.MSGR_ID
+        ) unread_rooms
+    </select>
+
+    <select id="countUnreadMessagesForNotifiedUser" resultType="int">
+        SELECT COUNT(*)
+        FROM MESSENGER_CONTENT c
+        INNER JOIN MESSENGER_USER mu
+            ON mu.MSGR_ID = c.MSGR_ID
+           AND mu.USER_ID = #{userId}
+           AND mu.LEFT_DT IS NULL
+           AND COALESCE(mu.NOTIFY_YN, 'Y') &lt;&gt; 'N'
+        LEFT JOIN MESSENGER_READ mr
+            ON mr.MSG_CONT_ID = c.MSG_CONT_ID
+           AND mr.USER_ID = #{userId}
+        WHERE c.USER_ID &lt;&gt; #{userId}
+          AND COALESCE(c.DEL_YN, 'N') = 'N'
+          AND mr.MSG_CONT_ID IS NULL
     </select>
 
     <select id="selectMyRoom" resultType="kr.or.ddit.vo.MessengerRoomVO">

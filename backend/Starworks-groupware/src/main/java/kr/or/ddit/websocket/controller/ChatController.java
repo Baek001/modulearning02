@@ -17,6 +17,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
@@ -38,6 +39,7 @@ import org.springframework.web.multipart.MultipartFile;
 import kr.or.ddit.security.CustomUserDetails;
 import kr.or.ddit.vo.ChatMessageDTO;
 import kr.or.ddit.vo.MessengerContentVO;
+import kr.or.ddit.vo.MessengerMessagePageVO;
 import kr.or.ddit.vo.MessengerPanelVO;
 import kr.or.ddit.vo.MessengerParticipantVO;
 import kr.or.ddit.vo.MessengerRoomDetailVO;
@@ -99,11 +101,14 @@ public class ChatController {
 
     @GetMapping("/room/{msgrId}/messages")
     @ResponseBody
-    public List<MessengerContentVO> getRoomMessages(
+    public MessengerMessagePageVO getRoomMessages(
         @PathVariable String msgrId,
-        @AuthenticationPrincipal CustomUserDetails userDetails
+        @AuthenticationPrincipal CustomUserDetails userDetails,
+        @RequestParam(required = false) Integer limit,
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) java.util.Date beforeSendDt,
+        @RequestParam(required = false) String beforeMsgContId
     ) {
-        return chatService.getRoomMessages(msgrId, userDetails.getUsername());
+        return chatService.getRoomMessages(msgrId, userDetails.getUsername(), limit, beforeSendDt, beforeMsgContId);
     }
 
     @GetMapping("/room/{msgrId}/search")
@@ -263,7 +268,7 @@ public class ChatController {
     ) {
         chatService.updateLeftTime(msgrId, userDetails.getUsername());
         messagingTemplate.convertAndSend("/topic/room/" + msgrId, Map.of("type", "LEAVE", "userId", userDetails.getUsername()));
-        messagingTemplate.convertAndSend("/topic/chat/update", Map.of("type", "ROOM_UPDATE", "msgrId", msgrId));
+
         messagingTemplate.convertAndSend("/topic/chat/update/" + userDetails.getUsername(), Map.of("type", "ROOM_UPDATE", "msgrId", msgrId));
         return Map.of("success", true);
     }
@@ -433,7 +438,7 @@ public class ChatController {
     }
 
     private void broadcastRoomRefresh(String msgrId, String requesterUserId) {
-        messagingTemplate.convertAndSend("/topic/chat/update", Map.of("type", "ROOM_UPDATE", "msgrId", msgrId));
+
         try {
             List<MessengerParticipantVO> participants = chatService.getRoomParticipants(msgrId, requesterUserId);
             for (MessengerParticipantVO participant : participants) {

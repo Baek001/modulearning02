@@ -1,5 +1,6 @@
 package kr.or.ddit.mybatis.mapper;
 
+import java.util.Date;
 import java.util.List;
 
 import org.apache.ibatis.annotations.Mapper;
@@ -11,6 +12,20 @@ import kr.or.ddit.vo.MessengerContentVO;
 public interface MessengerContentMapper {
 
     List<MessengerContentVO> selectMessengerContentByRoomId(@Param("msgrId") String msgrId, @Param("userId") String userId);
+
+    List<MessengerContentVO> selectRecentMessengerContentByRoomId(
+        @Param("msgrId") String msgrId,
+        @Param("userId") String userId,
+        @Param("limit") int limit
+    );
+
+    List<MessengerContentVO> selectOlderMessengerContentByRoomId(
+        @Param("msgrId") String msgrId,
+        @Param("userId") String userId,
+        @Param("beforeSendDt") Date beforeSendDt,
+        @Param("beforeMsgContId") String beforeMsgContId,
+        @Param("limit") int limit
+    );
 
     List<MessengerContentVO> searchMessengerContentByRoomId(@Param("msgrId") String msgrId, @Param("userId") String userId, @Param("keyword") String keyword);
 
