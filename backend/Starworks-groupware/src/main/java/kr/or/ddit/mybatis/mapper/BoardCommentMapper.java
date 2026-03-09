@@ -1,9 +1,10 @@
 package kr.or.ddit.mybatis.mapper;
 
 import java.util.List;
+import java.util.Map;
 
 import org.apache.ibatis.annotations.Mapper;
-
+import org.apache.ibatis.annotations.Param;
 import kr.or.ddit.vo.BoardCommentVO;
 
 /**
@@ -32,6 +33,7 @@ public interface BoardCommentMapper {
 	 */
 	public int selectBoardCommentTotalCount(BoardCommentVO boardComment);
 
+	public List<Map<String, Object>> selectBoardCommentCounts(@Param("pstIds") List<String> pstIds);
 	/**
 	 * 게시물 하나에 대한 모든 댓글 조회
 	 * @param pstId 게시물 Id

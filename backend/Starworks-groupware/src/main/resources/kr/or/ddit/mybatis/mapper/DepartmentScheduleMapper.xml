@@ -40,6 +40,23 @@
 		  AND COALESCE(DEL_YN, 'N') = 'N'
 		ORDER BY SCHD_STRT_DT ASC, DEPT_SCHD_ID ASC
 	</select>
+	<select id="selectDashboardFeedSchedules" resultType="kr.or.ddit.vo.DepartmentScheduleVO">
+		SELECT
+			DEPT_SCHD_ID
+			, DEPT_ID
+			, SCHD_STRT_DT
+			, SCHD_END_DT
+			, DEPT_SCHD_CRT_USER_ID
+			, SCHD_TTL
+			, ALLDAY
+			, DEPT_SCHD_EXPLN
+			, DEL_YN
+		FROM DEPARTMENT_SCHEDULE
+		WHERE COALESCE(DEL_YN, 'N') = 'N'
+		  AND COALESCE(SCHD_END_DT, SCHD_STRT_DT, CURRENT_TIMESTAMP) >= #{since}
+		ORDER BY COALESCE(SCHD_END_DT, SCHD_STRT_DT, CURRENT_TIMESTAMP) DESC, DEPT_SCHD_ID DESC
+		LIMIT #{limit}
+	</select>
 	<select id="selectDepartmentSchedule" resultType="kr.or.ddit.vo.DepartmentScheduleVO">
 		SELECT 
 			DEPT_SCHD_ID

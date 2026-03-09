@@ -157,6 +157,36 @@
 			FRST_CRT_DT DESC
 	</select>
 
+	<select id="selectDashboardNoticeList" resultType="kr.or.ddit.vo.BoardVO" resultMap="boardMap">
+		SELECT
+		     BOARD.BBS_CTGR_CD
+		    ,BOARD.PST_TTL
+		    ,BOARD.CONTENTS
+		    ,BOARD.VIEW_CNT
+		    ,BOARD.CRT_USER_ID
+		    ,BOARD.DEL_YN
+		    ,BOARD.FRST_CRT_DT
+		    ,BOARD.LAST_CHG_DT
+		    ,BOARD.LAST_CHG_USER_ID
+		    ,BOARD.PST_ID
+		    ,BOARD.PST_FILE_ID
+		    ,BOARD.FIXED_YN
+		    ,USERS.USER_NM
+		    ,DEPT.DEPT_NM
+		    ,JBGD.JBGD_NM
+		FROM BOARD
+		LEFT JOIN USERS
+		  ON BOARD.CRT_USER_ID = USERS.USER_ID
+		LEFT JOIN DEPARTMENT DEPT
+		  ON USERS.DEPT_ID = DEPT.DEPT_ID
+		LEFT JOIN JOB_GRADE JBGD
+		  ON USERS.JBGD_CD = JBGD.JBGD_CD
+		WHERE BOARD.BBS_CTGR_CD = 'F101'
+		  AND COALESCE(BOARD.DEL_YN, 'N') = 'N'
+		ORDER BY BOARD.FIXED_YN DESC, BOARD.FRST_CRT_DT DESC
+		LIMIT #{limit}
+	</select>
+
 	<!-- 자유게시판 검색 sql 조각 -->
 	<sql id="communitySimpleSearchFrag">
 		<where>
@@ -290,6 +320,35 @@
 	<!-- 자유게시판 목록조회 (페이징X) -->
 	<select id="selectCommunityListNonPaging" resultType="kr.or.ddit.vo.BoardVO" resultMap="boardMap">
 		<include refid="communityList" />
+	</select>
+
+	<select id="selectDashboardFeedBoards" resultType="kr.or.ddit.vo.BoardVO" resultMap="boardMap">
+		SELECT
+		     BOARD.BBS_CTGR_CD
+		    ,BOARD.PST_TTL
+		    ,BOARD.CONTENTS
+		    ,BOARD.VIEW_CNT
+		    ,BOARD.CRT_USER_ID
+		    ,BOARD.DEL_YN
+		    ,BOARD.FRST_CRT_DT
+		    ,BOARD.LAST_CHG_DT
+		    ,BOARD.LAST_CHG_USER_ID
+		    ,BOARD.PST_ID
+		    ,BOARD.PST_FILE_ID
+		    ,BOARD.FIXED_YN
+		    ,USERS.USER_NM
+		    ,DEPT.DEPT_NM
+		    ,JBGD.JBGD_NM
+		FROM BOARD
+		LEFT JOIN USERS
+		  ON BOARD.CRT_USER_ID = USERS.USER_ID
+		LEFT JOIN DEPARTMENT DEPT
+		  ON USERS.DEPT_ID = DEPT.DEPT_ID
+		LEFT JOIN JOB_GRADE JBGD
+		  ON USERS.JBGD_CD = JBGD.JBGD_CD
+		WHERE COALESCE(BOARD.DEL_YN, 'N') = 'N'
+		ORDER BY COALESCE(BOARD.LAST_CHG_DT, BOARD.FRST_CRT_DT) DESC
+		LIMIT #{limit}
 	</select>
 
 	<!-- 게시물 단건 조회 -->

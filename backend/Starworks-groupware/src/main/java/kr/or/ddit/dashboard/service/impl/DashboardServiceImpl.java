@@ -69,6 +69,10 @@ import lombok.extern.slf4j.Slf4j;
 public class DashboardServiceImpl implements DashboardService {
 
     private static final int FEED_PAGE_SIZE = 10;
+    private static final int FEED_BOARD_LIMIT = 120;
+    private static final int FEED_SCHEDULE_LIMIT = 80;
+    private static final int FEED_SCHEDULE_LOOKBACK_DAYS = 30;
+    private static final int WIDGET_NOTICE_LIMIT = 5;
     private static final int PROFILE_ACTIVITY_LIMIT = 5;
     private static final String NOTICE_CATEGORY = "F101";
     private static final Set<String> BOARD_CATEGORY_CODES = Set.of("F101", "F102", "F103", "F104", "F105", "F106");
@@ -220,7 +224,7 @@ public class DashboardServiceImpl implements DashboardService {
     public List<RecentBoardDTO> getRecentBoardList() {
         Map<String, UsersVO> userCache = new HashMap<>();
 
-        return loadAllBoards().stream()
+        return boardMapper.selectDashboardFeedBoards(FEED_BOARD_LIMIT).stream()
             .sorted(Comparator.comparing(BoardVO::getFrstCrtDt, Comparator.nullsLast(Comparator.reverseOrder())))
             .limit(5)
             .map(board -> new RecentBoardDTO(
@@ -316,9 +320,6 @@ public class DashboardServiceImpl implements DashboardService {
         response.put("items", pageItems);
         response.put("counts", counts);
         response.put("departments", buildDepartmentOptions());
-        response.put("favoriteCategories", getFavoriteCategories());
-        response.put("preferences", getFeedPreference());
-        response.put("recommendationCount", unreadRecommendationCount(currentUserId));
         return response;
     }
 
@@ -327,12 +328,7 @@ public class DashboardServiceImpl implements DashboardService {
         UsersVO currentUser = requireCurrentUser();
         String userId = currentUser.getUserId();
 
-        List<DashboardWidgetItemDTO> notices = boardMapper.selectNoticeListNonPaging().stream()
-            .sorted(
-                Comparator.comparing((BoardVO board) -> !"Y".equalsIgnoreCase(board.getFixedYn()))
-                    .thenComparing(BoardVO::getFrstCrtDt, Comparator.nullsLast(Comparator.reverseOrder()))
-            )
-            .limit(5)
+        List<DashboardWidgetItemDTO> notices = boardMapper.selectDashboardNoticeList(WIDGET_NOTICE_LIMIT).stream()
             .map(board -> DashboardWidgetItemDTO.builder()
                 .itemType("notice")
                 .title(board.getPstTtl())
@@ -378,11 +374,8 @@ public class DashboardServiceImpl implements DashboardService {
         response.put("notices", notices);
         response.put("sharedSchedules", sharedSchedules);
         response.put("mySchedules", mySchedules);
-        response.put("todoItems", buildTodoItems(currentUser));
         response.put("quickLinks", buildQuickLinks());
         response.put("favoriteUsers", getFavoriteUsers());
-        response.put("recommendationCount", unreadRecommendationCount(userId));
-        response.put("approvalCount", approvalMapper.countMyInboxCombined(Map.of("userId", userId)));
         return response;
     }
 
@@ -682,26 +675,63 @@ public class DashboardServiceImpl implements DashboardService {
         String currentUserId = currentUser.getUserId();
         List<DashboardFeedItemDTO> items = new ArrayList<>();
 
-        for (BoardVO board : loadAllBoards()) {
-            items.add(toBoardFeedItem(board, currentUserId, readPostIds, savedPostIds, commentedPostIds, userCache));
+        List<BoardVO> boards = boardMapper.selectDashboardFeedBoards(FEED_BOARD_LIMIT);
+        Map<String, Integer> commentCounts = loadBoardCommentCounts(boards);
+        for (BoardVO board : boards) {
+            items.add(toBoardFeedItem(board, currentUserId, readPostIds, savedPostIds, commentedPostIds, userCache, commentCounts));
         }
 
         List<ProjectVO> projects = projectMapper.selectProjectListForReact(currentUserId);
         for (ProjectVO project : projects) {
-            items.add(toProjectFeedItem(project, userCache));
+            items.add(toProjectFeedItem(project, currentUserId, userCache));
             for (MainTaskVO task : mainTaskMapper.selectMainTaskListNonPaging(project.getBizId())) {
-                items.add(toTaskFeedItem(task, userCache));
+                items.add(toTaskFeedItem(task, currentUserId, userCache));
             }
         }
 
-        for (DepartmentScheduleVO schedule : departmentScheduleMapper.selectDepartmentScheduleList()) {
-            DashboardFeedItemDTO item = toDepartmentScheduleFeedItem(schedule, userCache);
+        Map<String, DepartmentVO> departmentCache = loadDepartmentCache();
+        LocalDateTime scheduleSince = LocalDateTime.now().minusDays(FEED_SCHEDULE_LOOKBACK_DAYS);
+        for (DepartmentScheduleVO schedule : departmentScheduleMapper.selectDashboardFeedSchedules(scheduleSince, FEED_SCHEDULE_LIMIT)) {
+            DashboardFeedItemDTO item = toDepartmentScheduleFeedItem(schedule, currentUserId, userCache, departmentCache);
             if (item != null) {
                 items.add(item);
             }
         }
 
         return items;
+    }
+
+    private Map<String, Integer> loadBoardCommentCounts(List<BoardVO> boards) {
+        if (boards == null || boards.isEmpty()) {
+            return Map.of();
+        }
+
+        List<String> pstIds = boards.stream()
+            .map(BoardVO::getPstId)
+            .filter(Objects::nonNull)
+            .distinct()
+            .toList();
+        if (pstIds.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<String, Integer> counts = new HashMap<>();
+        for (Map<String, Object> row : boardCommentMapper.selectBoardCommentCounts(pstIds)) {
+            String pstId = row.get("pst_id") == null ? null : String.valueOf(row.get("pst_id"));
+            if (pstId == null) {
+                pstId = row.get("PST_ID") == null ? null : String.valueOf(row.get("PST_ID"));
+            }
+            Object countValue = row.containsKey("comment_count") ? row.get("comment_count") : row.get("COMMENT_COUNT");
+            if (pstId != null && countValue instanceof Number number) {
+                counts.put(pstId, number.intValue());
+            }
+        }
+        return counts;
+    }
+
+    private Map<String, DepartmentVO> loadDepartmentCache() {
+        return departmentMapper.selectDepartmentList().stream()
+            .collect(Collectors.toMap(DepartmentVO::getDeptId, department -> department, (left, right) -> left, LinkedHashMap::new));
     }
 
     private List<BoardVO> loadAllBoards() {
@@ -721,12 +751,11 @@ public class DashboardServiceImpl implements DashboardService {
         Set<String> readPostIds,
         Set<String> savedPostIds,
         Set<String> commentedPostIds,
-        Map<String, UsersVO> userCache
+        Map<String, UsersVO> userCache,
+        Map<String, Integer> commentCounts
     ) {
         UsersVO author = readUser(board.getCrtUserId(), userCache);
-        BoardCommentVO commentQuery = new BoardCommentVO();
-        commentQuery.setPstId(board.getPstId());
-        int commentCount = boardCommentMapper.selectBoardCommentTotalCount(commentQuery);
+        int commentCount = commentCounts.getOrDefault(board.getPstId(), 0);
         int viewCount = defaultInt(board.getViewCnt());
         boolean mine = Objects.equals(currentUserId, board.getCrtUserId());
 
@@ -757,7 +786,7 @@ public class DashboardServiceImpl implements DashboardService {
             .build();
     }
 
-    private DashboardFeedItemDTO toProjectFeedItem(ProjectVO project, Map<String, UsersVO> userCache) {
+    private DashboardFeedItemDTO toProjectFeedItem(ProjectVO project, String currentUserId, Map<String, UsersVO> userCache) {
         UsersVO manager = readUser(project.getBizPicId(), userCache);
         String preview = defaultString(project.getBizGoal(), project.getBizDetail());
         if (isBlank(preview)) {
@@ -787,12 +816,12 @@ public class DashboardServiceImpl implements DashboardService {
             .visibility("team")
             .read(true)
             .saved(false)
-            .mine(Objects.equals(project.getBizPicId(), requireCurrentUserId()))
+            .mine(Objects.equals(project.getBizPicId(), currentUserId))
             .commented(false)
             .build();
     }
 
-    private DashboardFeedItemDTO toTaskFeedItem(MainTaskVO task, Map<String, UsersVO> userCache) {
+    private DashboardFeedItemDTO toTaskFeedItem(MainTaskVO task, String currentUserId, Map<String, UsersVO> userCache) {
         UsersVO assignee = readUser(task.getBizUserId(), userCache);
         return DashboardFeedItemDTO.builder()
             .feedId("TASK-" + task.getTaskId())
@@ -817,12 +846,17 @@ public class DashboardServiceImpl implements DashboardService {
             .visibility("team")
             .read(true)
             .saved(false)
-            .mine(Objects.equals(task.getBizUserId(), requireCurrentUserId()))
+            .mine(Objects.equals(task.getBizUserId(), currentUserId))
             .commented(false)
             .build();
     }
 
-    private DashboardFeedItemDTO toDepartmentScheduleFeedItem(DepartmentScheduleVO schedule, Map<String, UsersVO> userCache) {
+    private DashboardFeedItemDTO toDepartmentScheduleFeedItem(
+        DepartmentScheduleVO schedule,
+        String currentUserId,
+        Map<String, UsersVO> userCache,
+        Map<String, DepartmentVO> departmentCache
+    ) {
         if (schedule == null || "Y".equalsIgnoreCase(schedule.getDelYn())) {
             return null;
         }
@@ -831,7 +865,7 @@ public class DashboardServiceImpl implements DashboardService {
         }
 
         UsersVO author = readUser(schedule.getDeptSchdCrtUserId(), userCache);
-        DepartmentVO department = departmentMapper.selectDepartment(schedule.getDeptId());
+        DepartmentVO department = departmentCache.get(schedule.getDeptId());
 
         return DashboardFeedItemDTO.builder()
             .feedId("DEPT-" + schedule.getDeptSchdId())
@@ -856,7 +890,7 @@ public class DashboardServiceImpl implements DashboardService {
             .visibility("department")
             .read(true)
             .saved(false)
-            .mine(Objects.equals(schedule.getDeptSchdCrtUserId(), requireCurrentUserId()))
+            .mine(Objects.equals(schedule.getDeptSchdCrtUserId(), currentUserId))
             .commented(false)
             .build();
     }

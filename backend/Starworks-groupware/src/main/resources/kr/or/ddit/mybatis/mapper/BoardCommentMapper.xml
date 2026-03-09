@@ -28,6 +28,19 @@
 			DEL_YN = 'N'
 	</select>
 
+	<select id="selectBoardCommentCounts" resultType="map">
+		SELECT
+			PST_ID,
+			COUNT(*) AS COMMENT_COUNT
+		FROM BOARD_COMMENT
+		WHERE COALESCE(DEL_YN, 'N') = 'N'
+		  AND PST_ID IN
+		  <foreach collection="pstIds" item="pstId" open="(" separator="," close=")">
+			#{pstId}
+		  </foreach>
+		GROUP BY PST_ID
+	</select>
+
 	<!-- 댓글 상세조회 -->
 	<select id="selectBoardCommentList" resultMap="boardCommentMap">
 		SELECT

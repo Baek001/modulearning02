@@ -1,7 +1,7 @@
 package kr.or.ddit.mybatis.mapper;
 
+import java.time.LocalDateTime;
 import java.util.List;
-
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -33,7 +33,8 @@ public interface DepartmentScheduleMapper {
 	public List<DepartmentScheduleVO> selectDepartmentScheduleList();
 
 	public List<DepartmentScheduleVO> selectDepartmentScheduleListByDeptId(@Param("deptId") String deptId);
-	
+
+	public List<DepartmentScheduleVO> selectDashboardFeedSchedules(@Param("since") LocalDateTime since, @Param("limit") int limit);	
 	/**
 	 * 부서 일정 단건 조회
 	 * @param deptSchdId : Department Schedule ID 

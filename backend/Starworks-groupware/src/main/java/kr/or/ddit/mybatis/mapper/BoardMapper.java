@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.ibatis.annotations.Mapper;
-
+import org.apache.ibatis.annotations.Param;
 import kr.or.ddit.comm.paging.PaginationInfo;
 import kr.or.ddit.vo.BoardVO;
 
@@ -50,6 +50,7 @@ public interface BoardMapper {
 	 */
 	public List<BoardVO> selectNoticeListNonPaging();
 
+	public List<BoardVO> selectDashboardNoticeList(@Param("limit") int limit);
 	/**
 	 * 관리자 대시보드 공지사항
 	 * @return
@@ -102,6 +103,7 @@ public interface BoardMapper {
 	 */
 	public List<BoardVO> selectCommunityListNonPaging(String bbsCtgrCd);
 
+	public List<BoardVO> selectDashboardFeedBoards(@Param("limit") int limit);
 	////////////////////////////////////////////////////////////////////////
 	/**
 	 * 조회수 증가
