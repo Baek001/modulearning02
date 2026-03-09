@@ -3,6 +3,7 @@ import { Container } from "@cloudflare/containers";
 const BACKEND_PREFIXES = [
   "/rest",
   "/common",
+  "/public",
   "/mail",
   "/chat",
   "/file",

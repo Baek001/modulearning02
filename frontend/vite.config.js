@@ -15,6 +15,10 @@ export default defineConfig({
         target: 'http://localhost:18080',
         changeOrigin: true,
       },
+      '/public': {
+        target: 'http://localhost:18080',
+        changeOrigin: true,
+      },
       '/mail': {
         target: 'http://localhost:18080',
         changeOrigin: true,
