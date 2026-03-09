@@ -732,7 +732,7 @@ public class DashboardServiceImpl implements DashboardService {
             .itemType("board")
             .categoryCode(board.getBbsCtgrCd())
             .categoryLabel(resolveBoardCategoryLabel(board.getBbsCtgrCd()))
-            .createdAt(Objects.requireNonNullElse(board.getLastChgDt(), board.getFrstCrtDt()))
+            .createdAt(resolveFeedCreatedAt(board.getLastChgDt(), board.getFrstCrtDt()))
             .actorUserId(board.getCrtUserId())
             .actorName(author == null ? defaultString(board.getUserNm(), board.getCrtUserId()) : defaultString(author.getUserNm(), board.getCrtUserId()))
             .actorFilePath(author == null ? null : author.getFilePath())
@@ -767,7 +767,7 @@ public class DashboardServiceImpl implements DashboardService {
             .activityType("project")
             .categoryCode("activity")
             .categoryLabel("업무활동")
-            .createdAt(Objects.requireNonNullElse(project.getStrtBizDt(), project.getEndBizDt()))
+            .createdAt(resolveFeedCreatedAt(project.getStrtBizDt(), project.getEndBizDt()))
             .actorUserId(project.getBizPicId())
             .actorName(manager == null ? defaultString(project.getBizPicNm(), project.getBizPicId()) : defaultString(manager.getUserNm(), project.getBizPicId()))
             .actorFilePath(manager == null ? null : manager.getFilePath())
@@ -797,7 +797,7 @@ public class DashboardServiceImpl implements DashboardService {
             .activityType("task")
             .categoryCode("activity")
             .categoryLabel("업무활동")
-            .createdAt(Objects.requireNonNullElse(task.getStrtTaskDt(), task.getEndTaskDt()))
+            .createdAt(resolveFeedCreatedAt(task.getStrtTaskDt(), task.getEndTaskDt()))
             .actorUserId(task.getBizUserId())
             .actorName(assignee == null ? defaultString(task.getBizUserNm(), task.getBizUserId()) : defaultString(assignee.getUserNm(), task.getBizUserId()))
             .actorFilePath(assignee == null ? null : assignee.getFilePath())
@@ -836,7 +836,7 @@ public class DashboardServiceImpl implements DashboardService {
             .activityType("departmentSchedule")
             .categoryCode("activity")
             .categoryLabel("업무활동")
-            .createdAt(Objects.requireNonNullElse(schedule.getSchdStrtDt(), schedule.getSchdEndDt()))
+            .createdAt(resolveFeedCreatedAt(schedule.getSchdStrtDt(), schedule.getSchdEndDt()))
             .actorUserId(schedule.getDeptSchdCrtUserId())
             .actorName(author == null ? schedule.getDeptSchdCrtUserId() : defaultString(author.getUserNm(), schedule.getDeptSchdCrtUserId()))
             .actorFilePath(author == null ? null : author.getFilePath())
@@ -1024,6 +1024,10 @@ public class DashboardServiceImpl implements DashboardService {
         }
 
         items.sort((left, right) -> compareDateDesc(left.getCreatedAt(), right.getCreatedAt()));
+    }
+
+    private LocalDateTime resolveFeedCreatedAt(LocalDateTime primary, LocalDateTime secondary) {
+        return primary != null ? primary : secondary;
     }
 
     private int compareDateDesc(LocalDateTime left, LocalDateTime right) {
