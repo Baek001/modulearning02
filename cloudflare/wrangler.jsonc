@@ -27,8 +27,12 @@
     "AWS_PATH_STYLE_ACCESS": "true",
     "APP_LOG_LEVEL": "info",
     "REQUEST_MAPPING_LOG_LEVEL": "warn",
+    "SPRING_WEB_LOG_LEVEL": "warn",
     "SPRING_VIEW_LOG_LEVEL": "warn",
     "SECURITY_LOG_LEVEL": "info",
+    "P6SPY_ENABLED": "false",
+    "P6SPY_MULTILINE": "false",
+    "P6SPY_LOG_LEVEL": "warn",
     "SPRING_AI_LOG_LEVEL": "warn"
   },
   "durable_objects": {
